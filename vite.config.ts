@@ -1,27 +1,13 @@
-import { defineConfig } from 'vite';
-import path from 'path'; 
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
-export default defineConfig(({ mode }) => ({
-  // ... (tus plugins) ...
-  resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-    },
-  },
-
+// Configuración básica para React + Vite + Vercel
+export default defineConfig({
+  plugins: [react()],
   build: {
-    // Esto debería resolver el error de build de Rollup y el 404 de fuentes
-    rollupOptions: {
-      output: {
-        manualChunks(id) {
-          if (id.includes('pdfmake')) {
-            return 'pdfmake-chunk'; // Crea un chunk separado para pdfmake
-          }
-        }
-      },
-      moduleContext: {
-        './node_modules/pdfmake/build/vfs_fonts.js': 'window',
-      },
-    },
+    sourcemap: false,
   },
-}));
+  server: {
+    port: 5173,
+  },
+});
