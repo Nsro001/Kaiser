@@ -1,0 +1,6 @@
+.../shadcn-ui/.mgx/config.yaml
+
+install: pnpm install
+dev: pnpm run dev
+build: pnpm run build
+build_path: dist
