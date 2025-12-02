@@ -1,9 +1,10 @@
-import pdfMake from "../lib/pdfMakeClient";
+import { getPdfMake } from "../lib/pdfMakeClient";
 
-// Asegurar que solo corre en navegador
-const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
+// Validación para evitar SSR en Vercel
+const isBrowser =
+    typeof window !== "undefined" && typeof document !== "undefined";
 
-// Convierte imagen a base64
+// Convertir imagen a base64 para pdfMake
 async function toBase64(url: string): Promise<string> {
     if (!isBrowser) return "";
     return new Promise((resolve) => {
@@ -22,8 +23,7 @@ async function toBase64(url: string): Promise<string> {
 }
 
 export const generateCotizacionPDF = async (data) => {
-
-    if (!isBrowser) return; // ← IMPORTANTE EN VERCEL
+    if (!isBrowser) return;
 
     const {
         cliente,
@@ -39,11 +39,11 @@ export const generateCotizacionPDF = async (data) => {
         fecha,
     } = data;
 
-    // Cargar logos desde public/
+    // Cargar imágenes desde /public
     const logoHeader = await toBase64("/logo-header.png");
     const logoFooter = await toBase64("/logo-footer.png");
 
-    // Items
+    // Construir tabla de items
     const items = [];
     let subtotal = 0;
 
@@ -68,6 +68,7 @@ export const generateCotizacionPDF = async (data) => {
     const iva = subtotal * 0.19;
     const totalGeneral = subtotal + iva + (incluirFlete ? flete : 0);
 
+    // DEFINICIÓN DEL PDF
     const docDefinition: any = {
         pageMargins: [40, 120, 40, 80],
 
@@ -127,7 +128,7 @@ export const generateCotizacionPDF = async (data) => {
             ],
         },
 
-        footer: function (currentPage, pageCount) {
+        footer: (currentPage, pageCount) => {
             return {
                 margin: [40, 0, 40, 20],
                 columns: [
@@ -218,6 +219,10 @@ export const generateCotizacionPDF = async (data) => {
             },
         },
     };
+
+    // 🚀 Cargar pdfMake dinámicamente SOLO en el navegador
+    const pdfMake = await getPdfMake();
+    if (!pdfMake) return;
 
     pdfMake.createPdf(docDefinition).download("cotizacion.pdf");
 };
