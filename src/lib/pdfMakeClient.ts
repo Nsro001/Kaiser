@@ -1,11 +1,15 @@
-// Este archivo entrega pdfMake SOLO en el navegador usando dynamic import.
+// pdfMake cargado SOLO en el navegador usando imports dinámicos seguros
 export async function getPdfMake() {
     if (typeof window === "undefined") return null;
 
-    const pdfMake = (await import("pdfmake/build/pdfmake")).default;
-    const pdfFonts = (await import("pdfmake/build/vfs_fonts")).default;
+    // Uso de rutas relativas para evitar errores del editor
+    const pdfMakeModule = await import("pdfmake/build/pdfmake.js");
+    const pdfFontsModule = await import("pdfmake/build/vfs_fonts.js");
 
-    pdfMake.vfs = pdfFonts.pdfMake.vfs;
+    const pdfMake = pdfMakeModule.default;
+
+    // pdfFontsModule.default → contiene {pdfMake:{vfs:{...}}}
+    pdfMake.vfs = pdfFontsModule.default.pdfMake.vfs;
 
     return pdfMake;
 }
