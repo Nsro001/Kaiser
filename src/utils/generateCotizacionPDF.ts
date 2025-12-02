@@ -1,9 +1,29 @@
-import * as pdfMake from 'pdfmake/build/pdfmake';
-// >>>>> Asegúrate de que esta línea esté presente y correcta: <<<<<
-import * as pdfFonts from 'pdfmake/build/vfs_fonts'; 
 
-// >>>>> Usa 'pdfFonts.vfs' en lugar de solo 'vfs': <<<<<
-(pdfMake as any).vfs = pdfFonts.vfs; 
+// generateCotizacionPDF.ts
+
+// Intenta importar desde la raíz del paquete en lugar de /build/
+import pdfMake from 'pdfmake'; 
+// No uses el * as aquí si puedes, a ver si ayuda
+import pdfFonts from 'pdfmake/build/vfs_fonts'; 
+
+// Asigna las fuentes como lo hacías:
+(pdfMake as any).vfs = pdfFonts.vfs;
+
+// --- AHORA VIENE LA PARTE CLAVE ---
+
+// Si usas estilos personalizados en tu docDefinition que especifican fuentes 
+// o si pdfMake por defecto busca fuentes específicas, a veces necesitas este paso extra:
+
+// Asegúrate de que pdfMake sepa que la fuente Roboto está disponible por defecto
+// Si no tienes fuentes personalizadas, esto a veces es necesario para la configuración por defecto:
+(pdfMake as any).fonts = {
+  Roboto: {
+    normal: 'Roboto-Regular.ttf',
+    bold: 'Roboto-Medium.ttf',
+    italics: 'Roboto-Italic.ttf',
+    bolditalics: 'Roboto-MediumItalic.ttf'
+  }
+}; 
 
 
 // Convierte imagen a base64 para pdfMake
