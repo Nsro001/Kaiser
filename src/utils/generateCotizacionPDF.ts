@@ -1,10 +1,5 @@
-// src/utils/generateCotizacionPDF.ts
-
-// 👇 ESTA ES LA FORMA QUE FUNCIONA EN VITE
-// @ts-ignore
 import pdfMake from "pdfmake/build/pdfmake";
-// @ts-ignore
-import pdfFonts from "pdfmake/build/vfs_fonts";
+import * as pdfFonts from "pdfmake/build/vfs_fonts";
 
 (pdfMake as any).vfs = (pdfFonts as any).pdfMake.vfs;
 
