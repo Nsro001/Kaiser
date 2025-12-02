@@ -1,8 +1,9 @@
-import pdfMake from "pdfmake/build/pdfmake";
-import { vfs } from "pdfmake/build/vfs_fonts";
+import * as pdfMake from 'pdfmake/build/pdfmake';
+// >>>>> Asegúrate de que esta línea esté presente y correcta: <<<<<
+import * as pdfFonts from 'pdfmake/build/vfs_fonts'; 
 
-(pdfMake as any).vfs = vfs;
-
+// >>>>> Usa 'pdfFonts.vfs' en lugar de solo 'vfs': <<<<<
+(pdfMake as any).vfs = pdfFonts.vfs; 
 
 
 // Convierte imagen a base64 para pdfMake
