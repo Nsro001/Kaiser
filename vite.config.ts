@@ -1,13 +1,27 @@
-// vite.config.ts simplificado si la importación dinámica funciona
 import { defineConfig } from 'vite';
 import path from 'path'; 
 
 export default defineConfig(({ mode }) => ({
-  // ... plugins ...
+  // ... (tus plugins) ...
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
   },
-  // Elimina optimizeDeps y build.rollupOptions si ya no los necesitas
+
+  build: {
+    // Esto debería resolver el error de build de Rollup y el 404 de fuentes
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('pdfmake')) {
+            return 'pdfmake-chunk'; // Crea un chunk separado para pdfmake
+          }
+        }
+      },
+      moduleContext: {
+        './node_modules/pdfmake/build/vfs_fonts.js': 'window',
+      },
+    },
+  },
 }));

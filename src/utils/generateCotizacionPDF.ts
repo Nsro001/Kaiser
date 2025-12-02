@@ -1,30 +1,17 @@
-// generateCotizacionPDF.ts
+import * as pdfMake from 'pdfmake/build/pdfmake';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts'; 
 
-// No pongas NADA de importaciones de pdfMake aquí arriba.
-// import * as pdfMake from 'pdfmake/build/pdfmake'; // ELIMINA ESTO
-// import * as pdfFonts from 'pdfmake/build/vfs_fonts'; // ELIMINA ESTO
+(pdfMake as any).vfs = pdfFonts.vfs;
 
-// Usa la función asíncrona para cargar todo
-export const generateQuotePdf = async (data) => {
-    
-    // Importa dinámicamente dentro de la función asíncrona
-    const pdfMakeModule = await import('pdfmake/build/pdfmake');
-    const pdfFontsModule = await import('pdfmake/build/vfs_fonts');
-    
-    const pdfMake = pdfMakeModule.default ? pdfMakeModule.default : pdfMakeModule;
-
-    (pdfMake as any).vfs = pdfFontsModule.vfs;
-
-    // Añado la configuración de fuentes por defecto por si acaso
-    (pdfMake as any).fonts = {
-      Roboto: {
-        normal: 'Roboto-Regular.ttf',
-        bold: 'Roboto-Medium.ttf',
-        italics: 'Roboto-Italic.ttf',
-        bolditalics: 'Roboto-MediumItalic.ttf'
-      }
-    };
-
+// Define las fuentes por defecto explícitamente.
+(pdfMake as any).fonts = {
+  Roboto: {
+    normal: 'Roboto-Regular.ttf',
+    bold: 'Roboto-Medium.ttf',
+    italics: 'Roboto-Italic.ttf',
+    bolditalics: 'Roboto-MediumItalics.ttf' // O 'Roboto-MediumItalic.ttf' si es el nombre correcto
+  }
+};
 
 // Convierte imagen a base64 para pdfMake
 async function toBase64(url: string): Promise<string> {
@@ -43,7 +30,7 @@ async function toBase64(url: string): Promise<string> {
     });
 }
 
-const generateCotizacionPDF = async (data) => {
+export const generateCotizacionPDF = async (data) => {
     const {
         cliente,
         rut,
@@ -244,9 +231,5 @@ const generateCotizacionPDF = async (data) => {
         },
     };
 
-   // return pdfMake.createPdf(docDefinition);
-    pdfMake.createPdf(docDefinition).download("cotizacion.pdf");
-    };
-    // Ejecuta la generación ahora que pdfMake está inicializado
-    await generateCotizacionPDF(data);
+  pdfMake.createPdf(docDefinition).download("cotizacion.pdf");
 };
