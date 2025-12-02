@@ -1,17 +1,4 @@
-import * as pdfMake from 'pdfmake/build/pdfmake';
-import * as pdfFonts from 'pdfmake/build/vfs_fonts'; 
-
-(pdfMake as any).vfs = pdfFonts.vfs;
-
-// Define las fuentes por defecto explícitamente.
-(pdfMake as any).fonts = {
-  Roboto: {
-    normal: 'Roboto-Regular.ttf',
-    bold: 'Roboto-Medium.ttf',
-    italics: 'Roboto-Italic.ttf',
-    bolditalics: 'Roboto-MediumItalics.ttf' // O 'Roboto-MediumItalic.ttf' si es el nombre correcto
-  }
-};
+import pdfMake from "../lib/pdfMakeClient";
 
 // Convierte imagen a base64 para pdfMake
 async function toBase64(url: string): Promise<string> {
