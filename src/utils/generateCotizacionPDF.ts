@@ -1,29 +1,29 @@
-
 // generateCotizacionPDF.ts
 
-// Intenta importar desde la raíz del paquete en lugar de /build/
-import pdfMake from 'pdfmake'; 
-// No uses el * as aquí si puedes, a ver si ayuda
-import pdfFonts from 'pdfmake/build/vfs_fonts'; 
+// No pongas NADA de importaciones de pdfMake aquí arriba.
+// import * as pdfMake from 'pdfmake/build/pdfmake'; // ELIMINA ESTO
+// import * as pdfFonts from 'pdfmake/build/vfs_fonts'; // ELIMINA ESTO
 
-// Asigna las fuentes como lo hacías:
-(pdfMake as any).vfs = pdfFonts.vfs;
+// Usa la función asíncrona para cargar todo
+export const generateQuotePdf = async (data) => {
+    
+    // Importa dinámicamente dentro de la función asíncrona
+    const pdfMakeModule = await import('pdfmake/build/pdfmake');
+    const pdfFontsModule = await import('pdfmake/build/vfs_fonts');
+    
+    const pdfMake = pdfMakeModule.default ? pdfMakeModule.default : pdfMakeModule;
 
-// --- AHORA VIENE LA PARTE CLAVE ---
+    (pdfMake as any).vfs = pdfFontsModule.vfs;
 
-// Si usas estilos personalizados en tu docDefinition que especifican fuentes 
-// o si pdfMake por defecto busca fuentes específicas, a veces necesitas este paso extra:
-
-// Asegúrate de que pdfMake sepa que la fuente Roboto está disponible por defecto
-// Si no tienes fuentes personalizadas, esto a veces es necesario para la configuración por defecto:
-(pdfMake as any).fonts = {
-  Roboto: {
-    normal: 'Roboto-Regular.ttf',
-    bold: 'Roboto-Medium.ttf',
-    italics: 'Roboto-Italic.ttf',
-    bolditalics: 'Roboto-MediumItalic.ttf'
-  }
-}; 
+    // Añado la configuración de fuentes por defecto por si acaso
+    (pdfMake as any).fonts = {
+      Roboto: {
+        normal: 'Roboto-Regular.ttf',
+        bold: 'Roboto-Medium.ttf',
+        italics: 'Roboto-Italic.ttf',
+        bolditalics: 'Roboto-MediumItalic.ttf'
+      }
+    };
 
 
 // Convierte imagen a base64 para pdfMake
@@ -43,7 +43,7 @@ async function toBase64(url: string): Promise<string> {
     });
 }
 
-export const generateCotizacionPDF = async (data) => {
+const generateCotizacionPDF = async (data) => {
     const {
         cliente,
         rut,
@@ -244,5 +244,9 @@ export const generateCotizacionPDF = async (data) => {
         },
     };
 
-    return pdfMake.createPdf(docDefinition);
+   // return pdfMake.createPdf(docDefinition);
+    pdfMake.createPdf(docDefinition).download("cotizacion.pdf");
+    };
+    // Ejecuta la generación ahora que pdfMake está inicializado
+    await generateCotizacionPDF(data);
 };
