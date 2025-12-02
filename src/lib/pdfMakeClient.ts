@@ -1,4 +1,9 @@
-// ESTE ARCHIVO SOLO SE EJECUTA EN EL CLIENTE
+// ARCHIVO SOLO PARA CLIENTE
+if (typeof window !== "undefined") {
+  // @ts-ignore
+  window.Buffer = window.Buffer || require("buffer").Buffer;
+}
+
 import pdfMake from "pdfmake/build/pdfmake";
 import pdfFonts from "pdfmake/build/vfs_fonts";
 

@@ -1,7 +1,11 @@
 import pdfMake from "../lib/pdfMakeClient";
 
-// Convierte imagen a base64 para pdfMake
+// Asegurar que solo corre en navegador
+const isBrowser = typeof window !== "undefined" && typeof document !== "undefined";
+
+// Convierte imagen a base64
 async function toBase64(url: string): Promise<string> {
+    if (!isBrowser) return "";
     return new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = "anonymous";
@@ -18,6 +22,9 @@ async function toBase64(url: string): Promise<string> {
 }
 
 export const generateCotizacionPDF = async (data) => {
+
+    if (!isBrowser) return; // ← IMPORTANTE EN VERCEL
+
     const {
         cliente,
         rut,
@@ -36,7 +43,7 @@ export const generateCotizacionPDF = async (data) => {
     const logoHeader = await toBase64("/logo-header.png");
     const logoFooter = await toBase64("/logo-footer.png");
 
-    // Construcción de items
+    // Items
     const items = [];
     let subtotal = 0;
 
@@ -54,7 +61,7 @@ export const generateCotizacionPDF = async (data) => {
             p.descripcion || "",
             p.cantidad,
             `$ ${precio.toLocaleString("es-CL")}`,
-                   `$ ${total.toLocaleString("es-CL")}`,
+            `$ ${total.toLocaleString("es-CL")}`,
         ]);
     });
 
@@ -67,7 +74,6 @@ export const generateCotizacionPDF = async (data) => {
         header: {
             margin: [40, 30, 40, 0],
             columns: [
-                // COLUMNA IZQUIERDA
                 {
                     width: "60%",
                     stack: [
@@ -81,8 +87,6 @@ export const generateCotizacionPDF = async (data) => {
                         { text: "www.cotizacion-web.com", fontSize: 10 },
                     ],
                 },
-
-                // COLUMNA DERECHA
                 {
                     width: "40%",
                     stack: [
@@ -138,7 +142,6 @@ export const generateCotizacionPDF = async (data) => {
         },
 
         content: [
-            // CAJA CLIENTE
             {
                 margin: [0, 0, 0, 15],
                 table: {
@@ -165,7 +168,6 @@ export const generateCotizacionPDF = async (data) => {
 
             { text: "Introducción predeterminada", margin: [0, 0, 0, 10] },
 
-            // TABLA ITEMS
             {
                 table: {
                     headerRows: 1,
@@ -188,7 +190,6 @@ export const generateCotizacionPDF = async (data) => {
                 },
             },
 
-            // TOTALES
             {
                 margin: [0, 20, 0, 10],
                 alignment: "right",
@@ -218,5 +219,5 @@ export const generateCotizacionPDF = async (data) => {
         },
     };
 
-  pdfMake.createPdf(docDefinition).download("cotizacion.pdf");
+    pdfMake.createPdf(docDefinition).download("cotizacion.pdf");
 };
