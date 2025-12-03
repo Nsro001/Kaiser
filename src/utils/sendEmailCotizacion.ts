@@ -1,13 +1,16 @@
 import emailjs from "@emailjs/browser";
 
-export async function sendCotizacionEmail(pdfBase64, correoDestino) {
+export async function sendEmailCotizacion(pdfBase64, correoDestino) {
     const templateParams = {
         to_email: correoDestino,
         message:
-        "Estimado Cliente en base a lo solicitado adjunto envío cotización solicitada. Quedamos atentos ante cualquier duda o consulta.\n\nAtte: Káiser Ingeniería",
+            "Estimado Cliente, adjuntamos la cotización solicitada.\n\nAtte: Káiser Ingeniería",
 
-        // IMPORTANTE: este nombre debe coincidir con EmailJS
-        _pdf: pdfBase64,
+        // EmailJS requiere el encabezado MIME
+        my_file: `data:application/pdf;base64,${pdfBase64}`,
+
+        // Opcional si quieres leer nombre dentro del template
+        my_file_name: "cotizacion.pdf"
     };
 
     return emailjs.send(
