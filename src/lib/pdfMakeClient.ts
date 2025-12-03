@@ -1,10 +1,9 @@
-// Cargar pdfMake SOLO en el navegador con imports ESM válidos en Vercel
+// Cargar pdfMake SOLO en el navegador con ESM real
 export async function getPdfMake() {
   if (typeof window === "undefined") return null;
 
-  // Importar desde la carpeta ES (ESM real)
-  const pdfMakeModule: any = await import("pdfmake/build/pdfmake.es.js");
-  const vfsModule: any = await import("pdfmake/build/vfs_fonts.es.js");
+  const pdfMakeModule: any = await import("pdfmake/build/pdfmake.js");
+  const vfsModule: any = await import("pdfmake/build/vfs_fonts.js");
 
   const pdfMake = pdfMakeModule.default;
 
