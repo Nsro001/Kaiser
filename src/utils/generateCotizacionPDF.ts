@@ -1,6 +1,7 @@
 import { getPdfMake } from "../lib/pdfMakeClient";
 import { sendEmailToBackend } from "./sendEmailToBackend";
 
+// Convierte imagen del public/ a base64
 async function toBase64(url: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
@@ -32,9 +33,11 @@ export const generateCotizacionPDF = async (data) => {
     fecha,
   } = data;
 
+  // Cargar logos
   const logoHeader = await toBase64("/logo-header.png");
   const logoFooter = await toBase64("/logo-footer.png");
 
+  // TABLA DE PRODUCTOS
   let subtotal = 0;
   const items = [];
 
@@ -58,7 +61,8 @@ export const generateCotizacionPDF = async (data) => {
   const iva = subtotal * 0.19;
   const totalGeneral = subtotal + iva + (incluirFlete ? flete : 0);
 
-  const docDefinition = {
+  // DEFINICIÓN DEL PDF
+  const docDefinition: any = {
     pageMargins: [40, 120, 40, 80],
 
     header: {
@@ -202,22 +206,26 @@ export const generateCotizacionPDF = async (data) => {
     ],
   };
 
+  // Cargar pdfMake desde CDN
   const pdfMake = await getPdfMake();
   if (!pdfMake) {
-    console.error("pdfMake no está listo");
+    console.error("pdfMake no está listo. Asegúrate que el CDN está al final del <body>.");
     return;
   }
 
   const pdfDoc = pdfMake.createPdf(docDefinition);
 
+  // DESCARGA LOCAL
   pdfDoc.download("cotizacion.pdf");
 
+  // ENVÍO POR EMAIL (BACKEND RENDER)
   if (pdfDoc.getBase64) {
     pdfDoc.getBase64(async (base64) => {
-      const result = await sendEmailToBackend(base64, email);
-      console.log("Respuesta backend:", result);
+      console.log("Enviando PDF al backend...");
+      const resp = await sendEmailToBackend(base64, email);
+      console.log("Respuesta backend:", resp);
     });
   } else {
-    console.error("pdfMake no soporta getBase64 en este navegador.");
+    console.error("getBase64 no existe. pdfMake NO se está cargando desde CDN.");
   }
 };
