@@ -1,13 +1,15 @@
-// pdfMake cargado SOLO en el navegador usando imports dinámicos seguros
+// Cargar pdfMake SOLO en el navegador usando dynamic import
 export async function getPdfMake() {
-    if (typeof window === "undefined") return null;
+  if (typeof window === "undefined") return null;
 
-    // Import dinámico con extensión .js (critico para Vercel)
-    const pdfMakeModule = await import("pdfmake/build/pdfmake.js");
-    const pdfFontsModule = await import("pdfmake/build/vfs_fonts.js");
+  const pdfMakeModule: any = await import("pdfmake/build/pdfmake.js");
+  const pdfFontsModule: any = await import("pdfmake/build/vfs_fonts.js");
 
-    const pdfMake = pdfMakeModule.default;
-    pdfMake.vfs = pdfFontsModule.default.pdfMake.vfs;
+  // pdfMake real
+  const pdfMake = pdfMakeModule.default;
 
-    return pdfMake;
+  // vfs viene directo en pdfFontsModule.pdfMake.vfs
+  pdfMake.vfs = pdfFontsModule.pdfMake.vfs;
+
+  return pdfMake;
 }
