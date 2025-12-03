@@ -1,8 +1,8 @@
 import { getPdfMake } from "../lib/pdfMakeClient";
-import { sendEmailCotizacion } from "./sendEmailCotizacion";
+import { sendEmailToBackend } from "./sendEmailToBackend";
 
-// Convierte imagen a base64
-async function toBase64(url) {
+// convertir imágenes a base64
+async function toBase64(url: string): Promise<string> {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -61,7 +61,6 @@ export const generateCotizacionPDF = async (data) => {
 
   const docDefinition = {
     pageMargins: [40, 120, 40, 80],
-
     header: {
       margin: [40, 30, 40, 0],
       columns: [
@@ -70,11 +69,11 @@ export const generateCotizacionPDF = async (data) => {
           stack: [
             { image: logoHeader, width: 140, margin: [0, 0, 0, 10] },
             { text: "Nombre Empresa", bold: true, fontSize: 11 },
-            { text: "Ejecutivo : Nombre Ejecutivo", fontSize: 10 },
-            { text: `Email : ${email}`, fontSize: 10 },
-            { text: `Teléfono : ${telefono}`, fontSize: 10 },
-            { text: "Rubro : Tecnología", fontSize: 10 },
-            { text: `Rut : ${rut}`, fontSize: 10 },
+            { text: "Ejecutivo: Nombre Ejecutivo", fontSize: 10 },
+            { text: `Email: ${email}`, fontSize: 10 },
+            { text: `Teléfono: ${telefono}`, fontSize: 10 },
+            { text: "Rubro: Tecnología", fontSize: 10 },
+            { text: `Rut: ${rut}`, fontSize: 10 },
             { text: "www.cotizacion-web.com", fontSize: 10 },
           ],
         },
@@ -87,7 +86,7 @@ export const generateCotizacionPDF = async (data) => {
                 body: [
                   [
                     {
-                      text: "N° COTIZACIÓN\n" + numeroCotizacion,
+                      text: `N° COTIZACIÓN\n${numeroCotizacion}`,
                       bold: true,
                       alignment: "center",
                       fontSize: 14,
@@ -104,7 +103,7 @@ export const generateCotizacionPDF = async (data) => {
                 body: [
                   [
                     {
-                      text: "Fecha: " + fecha,
+                      text: `Fecha: ${fecha}`,
                       alignment: "right",
                       margin: [0, 5],
                     },
@@ -123,7 +122,7 @@ export const generateCotizacionPDF = async (data) => {
       columns: [
         { image: logoFooter, width: 100 },
         {
-          text: "Página " + currentPage + "/" + pageCount,
+          text: `Página ${currentPage}/${pageCount}`,
           alignment: "right",
           fontSize: 9,
         },
@@ -139,15 +138,15 @@ export const generateCotizacionPDF = async (data) => {
             [
               {
                 stack: [
-                  { text: `Nombre Empresa : ${cliente}`, fontSize: 10 },
-                  { text: `RUT : ${rut}`, fontSize: 10 },
-                  { text: `Correo : ${email}`, fontSize: 10 },
+                  { text: `Nombre Empresa: ${cliente}`, fontSize: 10 },
+                  { text: `RUT: ${rut}`, fontSize: 10 },
+                  { text: `Correo: ${email}`, fontSize: 10 },
                 ],
               },
               {
                 stack: [
-                  { text: `Nombre : ${cliente}`, fontSize: 10 },
-                  { text: `Teléfono : ${telefono}`, fontSize: 10 },
+                  { text: `Nombre: ${cliente}`, fontSize: 10 },
+                  { text: `Teléfono: ${telefono}`, fontSize: 10 },
                 ],
               },
             ],
@@ -197,20 +196,23 @@ export const generateCotizacionPDF = async (data) => {
         },
       },
 
-      { text: "conclusión predeterminada", margin: [0, 40, 0, 10] },
+      { text: "Conclusión predeterminada", margin: [0, 40, 0, 10] },
     ],
   };
 
   const pdfMake = await getPdfMake();
-  if (!pdfMake) return;
+  if (!pdfMake) {
+    console.error("pdfMake no está listo aún");
+    return;
+  }
 
   const pdfDoc = pdfMake.createPdf(docDefinition);
 
-  // Descargar PDF
+  // Descargar el PDF
   pdfDoc.download("cotizacion.pdf");
 
-  // Enviar por correo
+  // Enviar al backend
   pdfDoc.getBase64(async (base64) => {
-    await sendEmailCotizacion(base64, email);
+    await sendEmailToBackend(base64, email);
   });
 };
