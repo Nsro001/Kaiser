@@ -222,7 +222,5 @@ export const generateCotizacionPDF = async (data) => {
 
     // 🚀 Cargar pdfMake dinámicamente SOLO en el navegador
     const pdfMake = await getPdfMake();
-    if (!pdfMake) return;
-
-    pdfMake.createPdf(docDefinition).download("cotizacion.pdf");
+pdfMake.createPdf(docDefinition).download("cotizacion.pdf");
 };
