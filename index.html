@@ -1,30 +1,20 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kaiser Cotizador</title>
+  </head>
 
-<head>
- 
-  <meta charset="UTF-8" />
-<link rel="icon" href="/synaptix.png" type="image/png" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>CotizaciónWeb - Sistema de Cotizaciones</title>
-  <meta name="description" content="Sistema completo de gestión de cotizaciones, órdenes de compra y clientes" />
-  <meta name="author" content="Synaptix" />
+  <body>
+    <div id="root"></div>
 
-  <meta property="og:title" content="CotizaciónWeb - Sistema de Cotizaciones" />
-  <meta property="og:description" content="Sistema completo de gestión de cotizaciones, órdenes de compra y clientes" />
-  <meta property="og:type" content="website" />
+    <!-- 🔥🔥🔥 SCRIPTS PDFMAKE (DEBEN IR ANTES DE main.tsx) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
 
-</head>
-
-<body>
-  <div id="root"></div>
-
- <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
-
-
-
-  <script type="module" src="/src/main.tsx"></script>
-</body>
-
+    <!-- 🔥🔥🔥 REACT / VITE -->
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
