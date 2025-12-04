@@ -9,6 +9,7 @@ import {
   Briefcase,
   ClipboardList,
   BarChart3,
+  StickyNote, 
   Settings,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -160,6 +161,7 @@ export default function Index() {
         <nav className="flex-1 px-4 py-6 space-y-1 text-sm">
           <SidebarLink to="/" icon={BarChart3} label="Dashboard" active />
           <SidebarLink to="/cotizaciones" icon={FileText} label="Cotizaciones" />
+          <SidebarLink to="/estado-resultados" icon={StickyNote} label="Estado de Resultados" />
           <SidebarLink to="/crear-cotizacion" icon={ClipboardList} label="Nueva Cotización" />
           <SidebarLink to="/clientes" icon={Users} label="Clientes" />
           <SidebarLink to="/servicios-productos" icon={Package} label="Servicios / Productos" />
