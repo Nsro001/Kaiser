@@ -12,6 +12,7 @@ import Proveedores from './pages/Proveedores';
 import OrdenesCompra from './pages/OrdenesCompra';
 import OrdenesTrabajo from './pages/OrdenesTrabajo';
 import EstadoResultados from './pages/EstadoResultados';
+import FacturacionSII from "./pages/FacturacionSII";
 
 const queryClient = new QueryClient();
 
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/ordenes-compra" element={<OrdenesCompra />} />
           <Route path="/ordenes-trabajo" element={<OrdenesTrabajo />} />
           <Route path="/estado-resultados" element={<EstadoResultados />} />
+          <Route path="/facturacion-sii" element={<FacturacionSII />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

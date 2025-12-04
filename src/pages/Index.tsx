@@ -168,6 +168,8 @@ export default function Index() {
           <SidebarLink to="/proveedores" icon={Building2} label="Proveedores" />
           <SidebarLink to="/ordenes-compra" icon={Briefcase} label="Órdenes de Compra" />
           <SidebarLink to="/ordenes-trabajo" icon={Briefcase} label="Órdenes de Trabajo" />
+          <SidebarLink to="/facturacion-sii" icon={FileText}  label="Facturación SII" 
+/>
         </nav>
 
         <div className="px-4 py-4 border-t text-xs text-slate-500 flex items-center gap-2">
