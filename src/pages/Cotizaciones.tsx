@@ -198,36 +198,43 @@ export default function Cotizaciones() {
   };
 
   const enviarEmail = async () => {
-    if (!cotizacionSeleccionada) return;
+  if (!cotizacionSeleccionada) return;
 
-    try {
-      // 🔵 Aquí deberías llamar a tu backend real (Supabase / Node / etc.)
-      // Ejemplo:
-      // await fetch("https://tu-backend.com/enviar-email", {
-      //   method: "POST",
-      //   headers: { "Content-Type": "application/json" },
-      //   body: JSON.stringify({
-      //     to: emailData.destinatario,
-      //     subject: emailData.asunto,
-      //     message: emailData.mensaje,
-      //     cotizacion: cotizacionSeleccionada,
-      //   }),
-      // });
+  try {
+    const response = await fetch("/api/enviar-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: emailData.destinatario,
+        subject: emailData.asunto,
+        message: emailData.mensaje,
+        cotizacion: cotizacionSeleccionada,
+      }),
+    });
 
-      // Por ahora solo simulamos:
-      toast.success(`Email enviado a ${emailData.destinatario}`);
-
-      // Cerrar modal
-      setIsEmailOpen(false);
-
-      // Actualizar estado a "enviada"
-      actualizarEstadoCotizacion(cotizacionSeleccionada.id, "enviada");
-    } catch (error) {
-      console.error(error);
-      toast.error("No se pudo enviar el email");
+    if (!response.ok) {
+      throw new Error("Error enviando email");
     }
-  };
 
+    toast.success(`Email enviado a ${emailData.destinatario}`);
+
+    // Cambiar estado a ENVIADA
+    const nuevas = cotizaciones.map((c) =>
+      c.id === cotizacionSeleccionada.id
+        ? { ...c, estado: "enviada" as const }
+        : c
+    );
+
+    setCotizaciones(nuevas);
+    localStorage.setItem("cotizaciones", JSON.stringify(nuevas));
+
+    // Cerrar modal
+    setIsEmailOpen(false);
+  } catch (error) {
+    console.error(error);
+    toast.error("No se pudo enviar el email");
+  }
+};
   // ============================
   // ELIMINAR COTIZACIÓN
   // ============================
