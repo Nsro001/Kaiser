@@ -9,10 +9,12 @@ import CrearCotizacion from './pages/CrearCotizacion';
 import Clientes from './pages/Clientes';
 import ServiciosProductos from './pages/ServiciosProductos';
 import Proveedores from './pages/Proveedores';
-import OrdenesCompra from './pages/OrdenesCompra';
-import OrdenesTrabajo from './pages/OrdenesTrabajo';
+import OrdenesCompra from "./pages/OrdenesCompra";
+import OrdenesTrabajo from "./pages/OrdenesTrabajo";
+import OrdenDetalle from "./pages/OrdenDetalle";
 import EstadoResultados from './pages/EstadoResultados';
 import FacturacionSII from "./pages/FacturacionSII";
+
 
 const queryClient = new QueryClient();
 
@@ -30,6 +32,7 @@ const App = () => (
           <Route path="/proveedores" element={<Proveedores />} />
           <Route path="/ordenes-compra" element={<OrdenesCompra />} />
           <Route path="/ordenes-trabajo" element={<OrdenesTrabajo />} />
+          <Route path="/ordenes-:tipo/:id" element={<OrdenDetalle />} />
           <Route path="/estado-resultados" element={<EstadoResultados />} />
           <Route path="/facturacion-sii" element={<FacturacionSII />} />
           <Route path="*" element={<NotFound />} />
