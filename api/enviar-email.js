@@ -12,24 +12,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!to) return res.status(400).json({ error: "Falta destinatario" });
 
     const mailersend = new MailerSend({
-      apiKey: process.env.MAILERSEND_API_KEY!
+      apiKey: process.env.MAILERSEND_API_KEY
     });
 
     const sentFrom = new Sender("cotizaciones@kaiseringenieria.cl", "Kaiser Ingeniería");
     const recipients = [new Recipient(to, "")];
 
-    const emailParams = new EmailParams()
+    const params = new EmailParams()
       .setFrom(sentFrom)
       .setTo(recipients)
-      .setSubject(subject)
-      .setHtml(message);
+      .setSubject(subject || "Cotización Kaiser Ingeniería")
+      .setHtml(message || "<p>Mensaje vacío</p>");
 
-    const result = await mailersend.email.send(emailParams);
+    const result = await mailersend.email.send(params);
 
     return res.status(200).json({ ok: true, result });
 
-  } catch (err) {
-    console.error("MailerSend error:", err);
+  } catch (err: any) {
+    console.error("ERROR MAILERSEND:", err?.response?.body || err);
     return res.status(500).json({ error: "Error enviando correo" });
   }
 }
