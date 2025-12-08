@@ -437,7 +437,7 @@ export default function CrearCotizacion() {
       exchangeRates,
     });
 
-    if (!pdf?.getBase64) {
+      if (!pdf?.getBase64) {
       toast.error("No se pudo generar el PDF para enviar");
       return;
     }
@@ -445,28 +445,38 @@ export default function CrearCotizacion() {
     return new Promise<void>((resolve) => {
       pdf.getBase64(async (base64Data: string) => {
         try {
-          const res = await fetch("/api/mailersend", {
+          const res = await fetch("/api/enviar-email", { // ✅ ENDPOINT CORRECTO
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               to: cotizacionActual.cliente?.email,
-              subject: `Cotizacion ${num}`,
-              pdfBase64: base64Data,
-              numero: num,
+              subject: `Cotización ${num}`,
+              html: `<h2>Adjuntamos su cotización N° ${num}</h2>`,
+              attachments: [
+                {
+                  filename: `cotizacion-${num}.pdf`,
+                  content: base64Data,
+                  encoding: "base64",
+                },
+              ],
             }),
           });
+
           if (!res.ok) {
             const data = await res.json().catch(() => ({}));
             throw new Error(data?.error || "Error enviando correo");
           }
+
           toast.success("Correo enviado con PDF adjunto");
+          resolve();
         } catch (err) {
           console.error(err);
           toast.error("No se pudo enviar el correo");
+          resolve();
         }
-        resolve();
       });
     });
+
   };
 
   const handleGuardarYEnviar = async () => {
