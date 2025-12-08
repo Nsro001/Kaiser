@@ -1,0 +1,5 @@
+Supabase
+Project url: https://rlmzrpfclxidavdsxjuc.supabase.co
+Api Kwy Anon public: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJsbXpycGZjbHhpZGF2ZHN4anVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ5NDUwODIsImV4cCI6MjA4MDUyMTA4Mn0.5xX4t_UxqFeJMaR4tvQo6cOD07wlsdiXzAx5vzU_zas
+Service :role key sb_secret_sy0gv6Ux5ZjATVJop8OOYw_XDHeCy7Q
+

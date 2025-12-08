@@ -254,7 +254,7 @@ export default function EstadoResultados() {
               </AlertDescription>
             </Alert>
             <p className="text-sm text-slate-600">
-              Cuando una cotización esté en estado <Badge>aprobada</Badge>, se considerará
+              Cuando una cotización esté en estado <span className="align-middle"><Badge>aprobada</Badge></span>, se considerará
               lista para pago y emisión de factura. En una siguiente fase se conectará este
               panel con un proveedor de facturación electrónica o la API del SII.
             </p>

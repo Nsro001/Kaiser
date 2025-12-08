@@ -1,974 +1,1020 @@
-import CotizacionActions from '@/components/CotizacionActions';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Bold, Italic, Underline, List, AlignLeft, AlignCenter, AlignRight, Plus, Trash2, Eye } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import { toast } from 'sonner';
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
+import * as XLSX from "xlsx";
+
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
+import {
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  Plus,
+  Trash2,
+} from "lucide-react";
+
+import CotizacionActions from "@/components/CotizacionActions";
+import { generateCotizacionPDF } from "@/utils/generateCotizacionPDF";
+
+const defaultExchange = { clp: 1, usd: 900, eur: 1000 };
+
+type Moneda = "clp" | "usd" | "eur";
 
 interface Cliente {
   id: string;
   nombre: string;
-  email: string;
   rut: string;
+  email: string;
+  telefono?: string;
+  direccion?: string;
 }
 
 interface Producto {
   id: string;
   nombre: string;
-  precio: number;
-  tipo: string;
   descripcion?: string;
-  categoria: string;
-}
-
-interface ItemCotizacion {
-  id: string;
-  productoId: string;
-  nombre: string;
   cantidad: number;
-  precio: number;
-  total: number;
+  moneda: Moneda;
+  costoCompra: number;
+  proveedor?: string;
+  codigo?: string;
+  plazo?: number;
+  margenItem?: number;
+  fleteItem?: number; // porcentaje de flete
 }
 
-interface Cotizacion {
+interface CotizacionGuardada {
   id: string;
   numero: string;
+  fecha: string;
+  estado: "borrador" | "enviada" | "aceptada";
   cliente: Cliente | null;
-  items: ItemCotizacion[];
+  items: Producto[];
   subtotal: number;
   iva: number;
-  total: number;
-  fecha: string;
-  estado: 'borrador' | 'enviada' | 'aceptada' | 'rechazada';
-  margen: number;
   flete: number;
-  incluirFlete: boolean;
+  total: number;
+  monedaEntrada: Moneda;
+  monedaPdf: Moneda;
+  margen: number;
+  ivaPorcentaje: number;
+  exchangeRates: typeof defaultExchange;
 }
+
+const today = new Date().toISOString().split("T")[0];
+
+const getCounter = () => Number(localStorage.getItem("contador_cotizaciones") || "1");
+const formatCounter = (n: number) => `COT-${n.toString().padStart(4, "0")}`;
+const consumeCounter = () => {
+  const next = getCounter() + 1;
+  localStorage.setItem("contador_cotizaciones", String(next));
+  return next;
+};
+
+const toNumber = (value: string | number) => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const convertCurrency = (
+  amount: number,
+  from: Moneda,
+  to: Moneda,
+  rates: typeof defaultExchange
+) => {
+  if (!Number.isFinite(amount)) return 0;
+  const fromRate = rates[from] || 1;
+  const toRate = rates[to] || 1;
+  return (amount * fromRate) / toRate;
+};
+
+const formatPrice = (value: number) =>
+  new Intl.NumberFormat("es-CL", {
+    style: "currency",
+    currency: "CLP",
+    maximumFractionDigits: 0,
+  }).format(Math.round(Number.isFinite(value) ? value : 0));
 
 export default function CrearCotizacion() {
   const navigate = useNavigate();
-  
+
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [productos, setProductos] = useState<Producto[]>([]);
+  const [items, setItems] = useState<Producto[]>([]);
+  const [exchangeRates, setExchangeRates] = useState(defaultExchange);
+  const [showProductos, setShowProductos] = useState(true);
 
-  const [items, setItems] = useState<ItemCotizacion[]>([]);
-  const [selectedClient, setSelectedClient] = useState('');
-  const [margenGanancia, setMargenGanancia] = useState<number>(20);
-  const [tieneFlete, setTieneFlete] = useState<boolean>(false);
-  const [montoFlete, setMontoFlete] = useState<number>(0);
-
-  // Estados para crear cliente
-  const [nuevoCliente, setNuevoCliente] = useState({
-    nombre: '',
-    email: '',
-    rut: '',
-    telefono: '',
-    direccion: ''
-  });
-  
-  // Estados para crear producto
-  const [nuevoProducto, setNuevoProducto] = useState({
-    nombre: '',
-    descripcion: '',
-    precio: '',
-    tipo: 'producto' as 'producto' | 'servicio',
-    categoria: ''
-  });
-
-  const [isClientDialogOpen, setIsClientDialogOpen] = useState(false);
-  const [isProductDialogOpen, setIsProductDialogOpen] = useState(false);
-
-  // Datos del formulario de cotización
   const [formData, setFormData] = useState({
-    referencia: '',
-    fecha: new Date().toISOString().split('T')[0],
-    prefijo: '',
-    factura: '',
-    compra: '',
-    introduccion: 'Introducción predeterminada',
-    notaInterna: '',
-    linkCotizacion: true,
-    monedaEntrada: 'clp',
-    monedaPdf: 'clp',
-    tipoVisualizacion: 'todo'
+    autor: "",
+    referencia: "",
+    fechaEmision: today,
+    monedaEntrada: "eur" as Moneda,
+    monedaPdf: "clp" as Moneda,
+    iva: 19,
+    margen: 20, // margen global por defecto, editable por item
   });
 
+  const [numeroCotizacion, setNumeroCotizacion] = useState(formatCounter(getCounter()));
+
+  const [nuevoCliente, setNuevoCliente] = useState<Cliente>({
+    id: "",
+    nombre: "",
+    rut: "",
+    email: "",
+    telefono: "",
+    direccion: "",
+  });
+
+  const [nuevoProducto, setNuevoProducto] = useState<Producto>({
+    id: "",
+    nombre: "",
+    descripcion: "",
+    cantidad: 1,
+    moneda: "clp",
+    costoCompra: 0,
+    proveedor: "",
+    codigo: "",
+    plazo: 0,
+  });
+
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [isProductoModal, setIsProductoModal] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+
+  // Cargar datos guardados
   useEffect(() => {
-    // Cargar clientes y productos desde localStorage
-    const clientesGuardados = JSON.parse(localStorage.getItem('clientes') || '[]');
-    const productosGuardados = JSON.parse(localStorage.getItem('productos') || '[]');
-    
-    setClientes(clientesGuardados);
-    setProductos(productosGuardados);
+    const storedClientes = JSON.parse(localStorage.getItem("clientes") || "[]");
+    const storedProductos = JSON.parse(localStorage.getItem("productos") || "[]");
+    setClientes(storedClientes);
+    setProductos(storedProductos);
   }, []);
 
-  const agregarItem = (producto: Producto) => {
-    const nuevoItem: ItemCotizacion = {
-      id: Date.now().toString(),
-      productoId: producto.id,
-      nombre: producto.nombre,
-      cantidad: 1,
-      precio: producto.precio,
-      total: producto.precio
+  // Traer tipos de cambio actuales (si hay red)
+  useEffect(() => {
+    const fetchRates = async () => {
+      try {
+        const res = await fetch("https://mindicador.cl/api");
+        if (!res.ok) throw new Error("No se pudo obtener indicadores");
+        const data = await res.json();
+        const usd = Number(data.dolar?.valor) || defaultExchange.usd;
+        const eur = Number(data.euro?.valor) || defaultExchange.eur;
+        setExchangeRates({ clp: 1, usd, eur });
+      } catch (err) {
+        console.warn("No se pudieron actualizar tasas, usando valores locales", err);
+      }
     };
-    setItems([...items, nuevoItem]);
-    toast.success(`${producto.nombre} agregado a la cotización`);
+    fetchRates();
+  }, []);
+
+  const selectedClient = clientes.find((c) => c.id === selectedClientId) || null;
+
+  const subtotal = useMemo(() => {
+    return items.reduce((acc, item) => {
+      const from = item.moneda || formData.monedaEntrada;
+      const costoEnPdf = convertCurrency(
+        Number.isFinite(item.costoCompra) ? Number(item.costoCompra) : 0,
+        from,
+        formData.monedaPdf,
+        exchangeRates
+      );
+      const margenItem = Number.isFinite(item.margenItem) ? Number(item.margenItem) : formData.margen;
+      const precioVenta = costoEnPdf * (1 + margenItem / 100);
+      const cantidad = Number.isFinite(item.cantidad) ? Number(item.cantidad) : 0;
+      return acc + precioVenta * cantidad;
+    }, 0);
+  }, [items, formData.monedaPdf, formData.margen, exchangeRates]);
+
+  const calcFleteMonto = (item: Producto, baseSubtotal: number) => {
+    const from = item.moneda || formData.monedaEntrada;
+    const costoEnPdf = convertCurrency(
+      Number.isFinite(item.costoCompra) ? Number(item.costoCompra) : 0,
+      from,
+      formData.monedaPdf,
+      exchangeRates
+    );
+    const margenItem = Number.isFinite(item.margenItem) ? Number(item.margenItem) : formData.margen;
+    const precioVenta = costoEnPdf * (1 + margenItem / 100);
+    const cantidad = Number.isFinite(item.cantidad) ? Number(item.cantidad) : 0;
+    const netoItem = precioVenta * cantidad;
+    const defaultPct = subtotal > 0 ? (netoItem / subtotal) * 100 : 0;
+    const pct = Number.isFinite(item.fleteItem) ? Number(item.fleteItem) : defaultPct;
+    return {
+      netoItem,
+      fletePct: pct,
+      fleteMonto: netoItem * (pct / 100),
+      precioUnit: precioVenta,
+    };
   };
 
-  const actualizarCantidad = (id: string, cantidad: number) => {
-    setItems(items.map(item => 
-      item.id === id 
-        ? { ...item, cantidad, total: cantidad * item.precio }
-        : item
-    ));
+  const fleteTotal = items.reduce((acc, item) => {
+    const { fleteMonto } = calcFleteMonto(item, subtotal);
+    return acc + fleteMonto;
+  }, 0);
+  const ivaMonto = subtotal * (formData.iva / 100);
+  const total = subtotal + ivaMonto + fleteTotal;
+
+  const guardarProductoNuevo = () => {
+    if (!nuevoProducto.nombre) {
+      toast.error("Ingresa un nombre de producto");
+      return;
+    }
+
+    const productoFinal = {
+      ...nuevoProducto,
+      id: `p-${Date.now()}`,
+    };
+
+    const actualizados = [...productos, productoFinal];
+    setProductos(actualizados);
+    localStorage.setItem("productos", JSON.stringify(actualizados));
+    setNuevoProducto({
+      id: "",
+      nombre: "",
+      descripcion: "",
+      cantidad: 1,
+      moneda: formData.monedaEntrada,
+      costoCompra: 0,
+      proveedor: "",
+      codigo: "",
+      plazo: 0,
+    });
+    setIsProductoModal(false);
+    toast.success("Producto creado");
+  };
+
+  const agregarItem = (p: Producto) => {
+    setItems((prev) => [
+      ...prev,
+      {
+        ...p,
+        id: `item-${Date.now()}`,
+        margenItem: Number.isFinite(p.margenItem) ? p.margenItem : formData.margen,
+        fleteItem: Number.isFinite(p.fleteItem) ? p.fleteItem : 0,
+      },
+    ]);
+  };
+
+  const actualizarItem = (id: string, data: Partial<Producto>) => {
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, ...data } : it)));
   };
 
   const eliminarItem = (id: string) => {
-    setItems(items.filter(item => item.id !== id));
-    toast.success('Item eliminado de la cotización');
+    setItems((prev) => prev.filter((i) => i.id !== id));
   };
 
-  const subtotal = items.reduce((sum, item) => {
-    const precioVenta = item.precio * (1 + margenGanancia / 100);
-    return sum + precioVenta * item.cantidad;
-  }, 0);
-  const iva = subtotal * 0.19;
-  const total = subtotal + iva + (tieneFlete ? montoFlete : 0);
+  const handleExcelChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
-  const handleCrearCliente = () => {
-    if (nuevoCliente.nombre && nuevoCliente.email && nuevoCliente.rut) {
-      const cliente: Cliente = {
-        id: Date.now().toString(),
-        nombre: nuevoCliente.nombre,
-        email: nuevoCliente.email,
-        rut: nuevoCliente.rut
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: "array" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json<Record<string, any>>(sheet, { defval: "" });
+
+    const nuevos: Producto[] = rows.map((row, idx) => {
+      const moneda = String(row["moneda"] || row["Moneda"] || formData.monedaEntrada).toLowerCase() as Moneda;
+      const valorOrigen =
+        row["Valor Unitario ORIGEN"] ??
+        row["valor unitario origen"] ??
+        row["valor_unitario_origen"] ??
+        row["Valor Unitario"] ??
+        row["valor"] ??
+        row["costo"] ??
+        0;
+      return {
+        id: `excel-${Date.now()}-${idx}`,
+        nombre: row["nombre"] || row["Producto"] || row["descripcion"] || "Producto",
+        descripcion: row["descripcion"] || row["Descripcion"] || "",
+        cantidad: toNumber(row["cantidad"] || row["Cantidad"] || 1),
+        moneda: ["clp", "usd", "eur"].includes(moneda) ? moneda : formData.monedaEntrada,
+        costoCompra: toNumber(valorOrigen),
+        proveedor: row["proveedor"] || row["Proveedor"] || row["Nombre Proveedor"] || "",
+        codigo: row["codigo"] || row["Codigo"] || "",
+        plazo: toNumber(row["plazo"] || row["Plazo"] || row["Plazo Días"] || 0),
+        margenItem: formData.margen,
+        fleteItem: 0,
       };
-      
-      // Guardar en localStorage
-      const clientesActuales = JSON.parse(localStorage.getItem('clientes') || '[]');
-      const nuevosClientes = [...clientesActuales, cliente];
-      localStorage.setItem('clientes', JSON.stringify(nuevosClientes));
-      
-      setClientes(nuevosClientes);
-      setSelectedClient(cliente.id);
-      setNuevoCliente({
-        nombre: '',
-        email: '',
-        rut: '',
-        telefono: '',
-        direccion: ''
-      });
-      setIsClientDialogOpen(false);
-      toast.success('Cliente creado exitosamente');
-    } else {
-      toast.error('Por favor completa los campos obligatorios');
-    }
+    });
+
+    const actualizados = [...productos, ...nuevos];
+    setProductos(actualizados);
+    localStorage.setItem("productos", JSON.stringify(actualizados));
+    toast.success("Productos importados desde Excel");
+    event.target.value = "";
   };
 
-  const handleCrearProducto = () => {
-    if (nuevoProducto.nombre && nuevoProducto.precio && nuevoProducto.categoria) {
-      const producto: Producto = {
-        id: Date.now().toString(),
-        ...nuevoProducto,
-        precio: parseFloat(nuevoProducto.precio),
-        descripcion: nuevoProducto.descripcion || ''
-      };
-      
-      // Guardar en localStorage
-      const productosActuales = JSON.parse(localStorage.getItem('productos') || '[]');
-      const nuevosProductos = [...productosActuales, producto];
-      localStorage.setItem('productos', JSON.stringify(nuevosProductos));
-      
-      setProductos(nuevosProductos);
-      setNuevoProducto({
-        nombre: '',
-        descripcion: '',
-        precio: '',
-        tipo: 'producto',
-        categoria: ''
-      });
-      setIsProductDialogOpen(false);
-      toast.success('Producto/Servicio creado exitosamente');
-    } else {
-      toast.error('Por favor completa los campos obligatorios');
+  const guardarCliente = () => {
+    if (!nuevoCliente.nombre || !nuevoCliente.rut) {
+      toast.error("Completa nombre y RUT del cliente");
+      return;
     }
+    const clienteFinal = { ...nuevoCliente, id: `cli-${Date.now()}` };
+    const actualizados = [...clientes, clienteFinal];
+    setClientes(actualizados);
+    localStorage.setItem("clientes", JSON.stringify(actualizados));
+    setSelectedClientId(clienteFinal.id);
+    setNuevoCliente({ id: "", nombre: "", rut: "", email: "", telefono: "", direccion: "" });
+    toast.success("Cliente creado");
   };
 
-  const handleCrearCotizacion = () => {
-    if (!selectedClient) {
-      toast.error('Por favor selecciona un cliente');
-      return;
-    }
-    
-    if (items.length === 0) {
-      toast.error('Por favor agrega al menos un producto o servicio');
-      return;
-    }
-
-    const cliente = clientes.find(c => c.id === selectedClient);
-    const cotizacion: Cotizacion = {
-      id: Date.now().toString(),
-      numero: `COT-${Date.now()}`,
-      cliente: cliente || null,
-      items: items,
-      subtotal: subtotal,
-      iva: iva,
-      total: total,
-      fecha: formData.fecha,
-      estado: 'enviada',
-      margen: margenGanancia,
-      flete: tieneFlete ? montoFlete : 0,
-      incluirFlete: tieneFlete
+  const cotizacionActual: CotizacionGuardada | null = useMemo(() => {
+    if (!selectedClient) return null;
+    return {
+      id: `cot-${Date.now()}`,
+      numero: numeroCotizacion,
+      fecha: formData.fechaEmision,
+      estado: "borrador",
+      cliente: selectedClient,
+      items,
+      subtotal,
+      iva: ivaMonto,
+      flete: fleteTotal,
+      total,
+      monedaEntrada: formData.monedaEntrada,
+      monedaPdf: formData.monedaPdf,
+      margen: formData.margen,
+      ivaPorcentaje: formData.iva,
+      incluirFlete: true,
+      exchangeRates,
     };
+  }, [selectedClient, numeroCotizacion, formData, items, subtotal, ivaMonto, fleteTotal, total, exchangeRates]);
 
-    // Guardar en localStorage
-    const cotizacionesExistentes = JSON.parse(localStorage.getItem('cotizaciones') || '[]');
-    cotizacionesExistentes.push(cotizacion);
-    localStorage.setItem('cotizaciones', JSON.stringify(cotizacionesExistentes));
-
-    toast.success('Cotización creada exitosamente');
-    navigate('/cotizaciones');
-  };
-
-  const handleCrearYVisualizar = () => {
-    if (!selectedClient) {
-      toast.error('Por favor selecciona un cliente');
-      return;
-    }
-    
-    if (items.length === 0) {
-      toast.error('Por favor agrega al menos un producto o servicio');
+  const guardarCotizacion = (estado: CotizacionGuardada["estado"], irLista = false) => {
+    if (!cotizacionActual) {
+      toast.error("Selecciona un cliente y agrega productos");
       return;
     }
 
-    const cliente = clientes.find(c => c.id === selectedClient);
-    const cotizacion: Cotizacion = {
-      id: Date.now().toString(),
-      numero: `COT-${Date.now()}`,
-      cliente: cliente || null,
-      items: items,
-      subtotal: subtotal,
-      iva: iva,
-      total: total,
-      fecha: formData.fecha,
-      estado: 'borrador',
-      margen: margenGanancia,
-      flete: tieneFlete ? montoFlete : 0,
-      incluirFlete: tieneFlete
-    };
+    const counter = consumeCounter();
+    const numero = formatCounter(counter);
+    setNumeroCotizacion(numero);
 
-    // Guardar en localStorage
-    const cotizacionesExistentes = JSON.parse(localStorage.getItem('cotizaciones') || '[]');
-    cotizacionesExistentes.push(cotizacion);
-    localStorage.setItem('cotizaciones', JSON.stringify(cotizacionesExistentes));
+    const nueva = { ...cotizacionActual, estado, numero };
+    const guardadas: CotizacionGuardada[] = JSON.parse(
+      localStorage.getItem("cotizaciones") || "[]"
+    );
 
-    // Mostrar vista previa
-    setIsPreviewOpen(true);
-    setPreviewCotizacion(cotizacion);
-    toast.success('Cotización creada. Mostrando vista previa...');
+    guardadas.push(nueva);
+    localStorage.setItem("cotizaciones", JSON.stringify(guardadas));
+    toast.success(`Cotizacion ${numero} guardada`);
+
+    if (irLista) navigate("/cotizaciones");
+    return numero;
   };
 
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [previewCotizacion, setPreviewCotizacion] = useState<Cotizacion | null>(null);
+  const verPDF = async () => {
+    if (!cotizacionActual) {
+      toast.error("Falta cliente o productos");
+      return;
+    }
+    const pdf = await generateCotizacionPDF({
+      cliente: cotizacionActual.cliente?.nombre,
+      rut: cotizacionActual.cliente?.rut,
+      direccion: cotizacionActual.cliente?.direccion,
+      email: cotizacionActual.cliente?.email,
+      telefono: cotizacionActual.cliente?.telefono,
+      productos: cotizacionActual.items,
+      margen: formData.margen,
+      flete: fleteTotal,
+      incluirFlete: true,
+      numeroCotizacion,
+      fecha: formData.fechaEmision,
+      monedaPdf: formData.monedaPdf,
+      exchangeRates,
+    });
+    pdf?.download("cotizacion.pdf");
+  };
 
-  const formatPrice = (price: number) => {
-    return new Intl.NumberFormat('es-CL', {
-      style: 'currency',
-      currency: 'CLP'
-    }).format(price);
+  const enviarEmailConPDF = async (numeroOverride?: string) => {
+    if (!cotizacionActual || !cotizacionActual.cliente?.email) {
+      toast.error("Falta correo del cliente para enviar");
+      return;
+    }
+    const num = numeroOverride || cotizacionActual.numero;
+    const pdf = await generateCotizacionPDF({
+      cliente: cotizacionActual.cliente?.nombre,
+      rut: cotizacionActual.cliente?.rut,
+      direccion: cotizacionActual.cliente?.direccion,
+      email: cotizacionActual.cliente?.email,
+      telefono: cotizacionActual.cliente?.telefono,
+      productos: cotizacionActual.items,
+      margen: formData.margen,
+      flete: fleteTotal,
+      incluirFlete: true,
+      numeroCotizacion: num,
+      fecha: formData.fechaEmision,
+      monedaPdf: formData.monedaPdf,
+      exchangeRates,
+    });
+
+    if (!pdf?.getBase64) {
+      toast.error("No se pudo generar el PDF para enviar");
+      return;
+    }
+
+    return new Promise<void>((resolve) => {
+      pdf.getBase64(async (base64Data: string) => {
+        try {
+          const res = await fetch("/api/mailersend", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              to: cotizacionActual.cliente?.email,
+              subject: `Cotizacion ${num}`,
+              pdfBase64: base64Data,
+              numero: num,
+            }),
+          });
+          if (!res.ok) throw new Error("Error enviando correo");
+          toast.success("Correo enviado con PDF adjunto");
+        } catch (err) {
+          console.error(err);
+          toast.error("No se pudo enviar el correo");
+        }
+        resolve();
+      });
+    });
+  };
+
+  const handleGuardarYEnviar = async () => {
+    if (!cotizacionActual) {
+      toast.error("Selecciona un cliente y agrega productos");
+      return;
+    }
+    const numero = guardarCotizacion("enviada");
+    await enviarEmailConPDF(numero);
   };
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-4">
-          <Link to="/cotizaciones">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Volver
-            </Button>
-          </Link>
-          <h1 className="text-2xl font-semibold">Crear Cotización</h1>
+    <div className="p-6 space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-semibold">Crear Cotizacion</h1>
+        <div className="space-x-2">
+          <Button variant="outline" onClick={() => setShowProductos((s) => !s)}>
+            {showProductos ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
+            {showProductos ? "Ocultar productos" : "Ver productos"}
+          </Button>
+          <Button onClick={() => setIsPreviewOpen(true)} disabled={!cotizacionActual} variant="secondary">
+            <Eye className="w-4 h-4 mr-2" /> Vista previa
+          </Button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Column */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Basic Info */}
-          <Card>
-            <CardContent className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Datos generales</CardTitle>
+        </CardHeader>
+        <CardContent className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <Label>Autor</Label>
+            <Input
+              value={formData.autor}
+              onChange={(e) => setFormData({ ...formData, autor: e.target.value })}
+              placeholder="Nombre autor"
+            />
+          </div>
+          <div>
+            <Label>Referencia</Label>
+            <Input
+              value={formData.referencia}
+              onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
+              placeholder="Referencia"
+            />
+          </div>
+          <div>
+            <Label>Fecha emision</Label>
+            <Input
+              type="date"
+              value={formData.fechaEmision}
+              onChange={(e) => setFormData({ ...formData, fechaEmision: e.target.value })}
+            />
+          </div>
+          <div>
+            <Label>Numero</Label>
+            <Input value={numeroCotizacion} readOnly className="bg-slate-100 font-semibold" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Cliente</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>Selecciona cliente</Label>
+                <Select value={selectedClientId} onValueChange={setSelectedClientId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Elige un cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientes.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.nombre} - {c.rut}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label htmlFor="autor">Autor</Label>
-                  <Select>
-                    <SelectTrigger>
-                      <SelectValue placeholder="jonathan.madrid.ara@gmail.com" />
-                    </SelectTrigger>
+                  <Label>Moneda entrada</Label>
+                  <Select
+                    value={formData.monedaEntrada}
+                    onValueChange={(v) => setFormData({ ...formData, monedaEntrada: v as Moneda })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="jonathan">jonathan.madrid.ara@gmail.com</SelectItem>
+                      <SelectItem value="clp">CLP</SelectItem>
+                      <SelectItem value="usd">USD</SelectItem>
+                      <SelectItem value="eur">EUR</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <Label htmlFor="referencia">Referencia</Label>
-                  <Input 
-                    placeholder="referencia de búsqueda (opcional)" 
-                    value={formData.referencia}
-                    onChange={(e) => setFormData({...formData, referencia: e.target.value})}
+                  <Label>Moneda PDF</Label>
+                  <Select
+                    value={formData.monedaPdf}
+                    onValueChange={(v) => setFormData({ ...formData, monedaPdf: v as Moneda })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="clp">CLP</SelectItem>
+                      <SelectItem value="usd">USD</SelectItem>
+                      <SelectItem value="eur">EUR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <Label>Crear cliente rapido</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    placeholder="Nombre"
+                    value={nuevoCliente.nombre}
+                    onChange={(e) => setNuevoCliente({ ...nuevoCliente, nombre: e.target.value })}
+                  />
+                  <Input
+                    placeholder="RUT"
+                    value={nuevoCliente.rut}
+                    onChange={(e) => setNuevoCliente({ ...nuevoCliente, rut: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Email"
+                    value={nuevoCliente.email}
+                    onChange={(e) => setNuevoCliente({ ...nuevoCliente, email: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Telefono"
+                    value={nuevoCliente.telefono}
+                    onChange={(e) => setNuevoCliente({ ...nuevoCliente, telefono: e.target.value })}
+                  />
+                  <Input
+                    placeholder="Direccion"
+                    className="md:col-span-2"
+                    value={nuevoCliente.direccion}
+                    onChange={(e) => setNuevoCliente({ ...nuevoCliente, direccion: e.target.value })}
                   />
                 </div>
-                <div>
-                  <Label htmlFor="fecha">Fecha emisión</Label>
-                  <Input 
-                    type="date" 
-                    value={formData.fecha}
-                    onChange={(e) => setFormData({...formData, fecha: e.target.value})}
-                  />
+                <div className="pt-2">
+                  <Button size="sm" onClick={guardarCliente}>Guardar cliente</Button>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2 mb-6">
-                <Checkbox 
-                  id="link-cotizacion" 
-                  checked={formData.linkCotizacion}
-                  onCheckedChange={(checked) => setFormData({...formData, linkCotizacion: !!checked})}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label>IVA (%)</Label>
+                  <Input
+                    type="number"
+                    value={formData.iva}
+                    onChange={(e) => setFormData({ ...formData, iva: toNumber(e.target.value) })}
+                  />
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Tipos de cambio</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-3 gap-2 items-end">
+              <div>
+                <Label>CLP</Label>
+                <Input value={exchangeRates.clp} readOnly className="bg-slate-100" />
+              </div>
+              <div>
+                <Label>USD</Label>
+                <Input
+                  type="number"
+                  value={exchangeRates.usd}
+                  onChange={(e) => setExchangeRates({ ...exchangeRates, usd: toNumber(e.target.value) })}
                 />
-                <Label htmlFor="link-cotizacion">Link de Cotización</Label>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="prefijo">Prefijo Numero</Label>
-                  <Input 
-                    placeholder="(opcional)" 
-                    value={formData.prefijo}
-                    onChange={(e) => setFormData({...formData, prefijo: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="factura">N° Factura</Label>
-                  <Input 
-                    placeholder="(opcional)" 
-                    value={formData.factura}
-                    onChange={(e) => setFormData({...formData, factura: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="compra">N° O.Compra</Label>
-                  <Input 
-                    placeholder="(opcional)" 
-                    value={formData.compra}
-                    onChange={(e) => setFormData({...formData, compra: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="margen">Margen de ganancia (%) *</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    value={margenGanancia}
-                    onChange={(e) => setMargenGanancia(Number(e.target.value) || 0)}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="flete">Flete (CLP)</Label>
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="tiene-flete"
-                      checked={tieneFlete}
-                      onCheckedChange={(checked) => setTieneFlete(!!checked)}
-                    />
-                    <span className="text-sm">Incluir flete</span>
-                  </div>
-                  <Input
-                    type="number"
-                    min={0}
-                    disabled={!tieneFlete}
-                    value={montoFlete}
-                    onChange={(e) => setMontoFlete(Number(e.target.value) || 0)}
-                    className="mt-2"
-                  />
-                </div>
+              <div>
+                <Label>EUR</Label>
+                <Input
+                  type="number"
+                  value={exchangeRates.eur}
+                  onChange={(e) => setExchangeRates({ ...exchangeRates, eur: toNumber(e.target.value) })}
+                />
               </div>
-            </CardContent>
-          </Card>
+            </div>
+            <p className="text-xs text-slate-500">
+              Si no hay internet se usan valores locales. Los totales se recalculan al cambiar moneda PDF.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
 
-          {/* Client Selection */}
-          <Card>
-            <CardContent className="p-6">
-              <Tabs defaultValue="empresa-cliente">
-                <TabsList>
-                  <TabsTrigger value="empresa-cliente">Empresa/Cliente</TabsTrigger>
-                  <TabsTrigger value="crear-empresa">Crear Empresa/Cliente</TabsTrigger>
-                </TabsList>
-                <TabsContent value="empresa-cliente" className="mt-4">
-                  <div>
-                    <Label>Selecciona la Empresa/Cliente</Label>
-                    <Select value={selectedClient} onValueChange={setSelectedClient}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Seleccionar cliente..." />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clientes.map(cliente => (
-                          <SelectItem key={cliente.id} value={cliente.id}>
-                            {cliente.nombre} • {cliente.rut} • {cliente.email}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </TabsContent>
-                <TabsContent value="crear-empresa" className="mt-4">
-                  <Dialog open={isClientDialogOpen} onOpenChange={setIsClientDialogOpen}>
-                    <DialogTrigger asChild>
-                      <Button className="w-full">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Crear Nuevo Cliente
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Crear Nuevo Cliente</DialogTitle>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <Label htmlFor="nombre">Nombre de la Empresa *</Label>
-                          <Input
-                            id="nombre"
-                            value={nuevoCliente.nombre}
-                            onChange={(e) => setNuevoCliente({...nuevoCliente, nombre: e.target.value})}
-                            placeholder="Ej: Empresa ABC S.A."
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="rut">RUT *</Label>
-                          <Input
-                            id="rut"
-                            value={nuevoCliente.rut}
-                            onChange={(e) => setNuevoCliente({...nuevoCliente, rut: e.target.value})}
-                            placeholder="Ej: 12.345.678-9"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="email">Email *</Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            value={nuevoCliente.email}
-                            onChange={(e) => setNuevoCliente({...nuevoCliente, email: e.target.value})}
-                            placeholder="contacto@empresa.cl"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="telefono">Teléfono</Label>
-                          <Input
-                            id="telefono"
-                            value={nuevoCliente.telefono}
-                            onChange={(e) => setNuevoCliente({...nuevoCliente, telefono: e.target.value})}
-                            placeholder="+56 9 1234 5678"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="direccion">Dirección</Label>
-                          <Input
-                            id="direccion"
-                            value={nuevoCliente.direccion}
-                            onChange={(e) => setNuevoCliente({...nuevoCliente, direccion: e.target.value})}
-                            placeholder="Dirección completa"
-                          />
-                        </div>
-                        <div className="flex justify-end space-x-2 pt-4">
-                          <Button variant="outline" onClick={() => setIsClientDialogOpen(false)}>
-                            Cancelar
-                          </Button>
-                          <Button onClick={handleCrearCliente} className="bg-green-600 hover:bg-green-700">
-                            Crear Cliente
-                          </Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-
-          {/* Products/Services */}
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">Productos y Servicios</CardTitle>
-                <Dialog open={isProductDialogOpen} onOpenChange={setIsProductDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="outline" size="sm">
-                      <Plus className="w-4 h-4 mr-2" />
-                      Crear Producto
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent>
-                    <DialogHeader>
-                      <DialogTitle>Crear Nuevo Producto/Servicio</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="tipo">Tipo *</Label>
-                        <Select value={nuevoProducto.tipo} onValueChange={(value: 'producto' | 'servicio') => setNuevoProducto({...nuevoProducto, tipo: value})}>
-                          <SelectTrigger>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="producto">Producto</SelectItem>
-                            <SelectItem value="servicio">Servicio</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="nombre">Nombre *</Label>
-                        <Input
-                          id="nombre"
-                          value={nuevoProducto.nombre}
-                          onChange={(e) => setNuevoProducto({...nuevoProducto, nombre: e.target.value})}
-                          placeholder="Nombre del producto/servicio"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="categoria">Categoría *</Label>
-                        <Input
-                          id="categoria"
-                          value={nuevoProducto.categoria}
-                          onChange={(e) => setNuevoProducto({...nuevoProducto, categoria: e.target.value})}
-                          placeholder="Ej: Desarrollo, Hardware, Consultoría"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="precio">Precio (CLP) *</Label>
-                        <Input
-                          id="precio"
-                          type="number"
-                          value={nuevoProducto.precio}
-                          onChange={(e) => setNuevoProducto({...nuevoProducto, precio: e.target.value})}
-                          placeholder="0"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="descripcion">Descripción</Label>
-                        <Textarea
-                          id="descripcion"
-                          value={nuevoProducto.descripcion}
-                          onChange={(e) => setNuevoProducto({...nuevoProducto, descripcion: e.target.value})}
-                          placeholder="Descripción detallada"
-                          rows={3}
-                        />
-                      </div>
-                      <div className="flex justify-end space-x-2 pt-4">
-                        <Button variant="outline" onClick={() => setIsProductDialogOpen(false)}>
-                          Cancelar
-                        </Button>
-                        <Button onClick={handleCrearProducto} className="bg-green-600 hover:bg-green-700">
-                          Crear
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="mb-4">
-                <Label>Agregar Producto/Servicio</Label>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
-                  {productos.map(producto => (
-                    <Button
-                      key={producto.id}
-                      variant="outline"
-                      onClick={() => agregarItem(producto)}
-                      className="justify-start h-auto p-3"
-                    >
-                      <div className="text-left">
-                        <div className="font-medium">{producto.nombre}</div>
-                        <div className="text-sm text-gray-500">{formatPrice(producto.precio)}</div>
-                        <div className="text-xs text-gray-400">{producto.categoria}</div>
-                      </div>
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              {items.length > 0 && (
-                <div className="mt-6">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Producto/Servicio</TableHead>
-                        <TableHead>Cantidad</TableHead>
-                        <TableHead>Costo Neto</TableHead>
-                        <TableHead>Precio Venta</TableHead>
-                        <TableHead>Total</TableHead>
-                        <TableHead></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {items.map(item => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.nombre}</TableCell>
-                          <TableCell>
-                            <Input
-                              type="number"
-                              value={item.cantidad}
-                              onChange={(e) => actualizarCantidad(item.id, parseInt(e.target.value) || 1)}
-                              className="w-20"
-                              min="1"
-                            />
-                          </TableCell>
-                          <TableCell>{formatPrice(item.precio)}</TableCell>
-                          <TableCell>{formatPrice(item.precio * (1 + margenGanancia / 100))}</TableCell>
-                          <TableCell className="font-medium">
-                            {formatPrice(item.precio * (1 + margenGanancia / 100) * item.cantidad)}
-                          </TableCell>
-                          <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => eliminarItem(item.id)}
-                              className="text-red-600"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-
-                  <div className="mt-4 space-y-2 text-right">
-                    <div>Subtotal: {formatPrice(subtotal)}</div>
-                    <div>IVA (19%): {formatPrice(iva)}</div>
-                    <div className="text-lg font-bold">Total: {formatPrice(total)}</div>
-                  </div>
-                </div>
+      <Card>
+        <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+          <CardTitle>Productos</CardTitle>
+          <div className="flex items-center gap-2">
+            <Input type="file" accept=".xlsx,.xls" onChange={handleExcelChange} className="max-w-xs" />
+            <Button size="sm" onClick={() => setIsProductoModal(true)}>
+              <Plus className="w-4 h-4 mr-1" /> Nuevo producto
+            </Button>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {showProductos && (
+            <div className="border rounded-md p-3 max-h-80 overflow-y-auto space-y-2">
+              {productos.length === 0 && (
+                <p className="text-sm text-slate-500">No hay productos guardados.</p>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Currency Configuration */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Configuración Monedas</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label>Moneda de Entrada</Label>
-                  <Select value={formData.monedaEntrada} onValueChange={(value) => setFormData({...formData, monedaEntrada: value})}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="clp">CLP (Peso Chileno)</SelectItem>
-                      <SelectItem value="usd">USD (Dólar)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Moneda de PDF</Label>
-                  <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-                      <span className="text-red-600 text-xs">PDF</span>
+              {productos.map((p) => (
+                <div key={p.id} className="flex items-center justify-between border rounded p-2">
+                  <div>
+                    <div className="font-medium">{p.nombre}</div>
+                    <div className="text-xs text-slate-500">
+                      {p.moneda.toUpperCase()} {formatPrice(p.costoCompra).replace("$", "")} · Cant: {p.cantidad}
                     </div>
-                    <Select value={formData.monedaPdf} onValueChange={(value) => setFormData({...formData, monedaPdf: value})}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="clp">CLP (Peso Chileno)</SelectItem>
-                        <SelectItem value="usd">USD (Dólar)</SelectItem>
-                      </SelectContent>
-                    </Select>
                   </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Introduction Section */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Introducción</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex space-x-2 mb-4">
-                <Button variant="outline" size="sm">nuevo texto</Button>
-                <Button variant="outline" size="sm">nueva imagen</Button>
-              </div>
-
-              {/* Rich Text Editor Toolbar */}
-              <div className="border rounded-t-md p-2 bg-gray-50">
-                <div className="flex items-center space-x-2">
-                  <Button variant="ghost" size="sm">
-                    <Bold className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Italic className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Underline className="w-4 h-4" />
-                  </Button>
-                  <div className="w-px h-4 bg-gray-300 mx-2"></div>
-                  <Button variant="ghost" size="sm">
-                    <List className="w-4 h-4" />
-                  </Button>
-                  <div className="w-px h-4 bg-gray-300 mx-2"></div>
-                  <Button variant="ghost" size="sm">
-                    <AlignLeft className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <AlignCenter className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <AlignRight className="w-4 h-4" />
+                  <Button size="sm" variant="outline" onClick={() => agregarItem(p)}>
+                    Agregar
                   </Button>
                 </div>
-              </div>
-              <Textarea 
-                className="rounded-t-none min-h-32" 
-                value={formData.introduccion}
-                onChange={(e) => setFormData({...formData, introduccion: e.target.value})}
-                placeholder="Introducción predeterminada"
-              />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Right Column */}
-        <div className="space-y-6">
-          {/* Internal Notes */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Nota Interna</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {/* Rich Text Editor Toolbar */}
-              <div className="border rounded-t-md p-2 bg-gray-50">
-                <div className="flex items-center space-x-2">
-                  <Button variant="ghost" size="sm">
-                    <Bold className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Italic className="w-4 h-4" />
-                  </Button>
-                  <Button variant="ghost" size="sm">
-                    <Underline className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-              <Textarea 
-                className="rounded-t-none min-h-24" 
-                value={formData.notaInterna}
-                onChange={(e) => setFormData({...formData, notaInterna: e.target.value})}
-                placeholder="Notas internas (no aparecen en el PDF)"
-              />
-            </CardContent>
-          </Card>
-
-          {/* Visualization Types */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-lg">Tipos de visualización</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 gap-4">
-                <div className="text-center">
-                  <div className={`border-2 rounded-lg p-4 ${formData.tipoVisualizacion === 'todo' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                    <div className="w-8 h-8 mx-auto mb-2 bg-blue-100 rounded"></div>
-                  </div>
-                  <div className="flex items-center justify-center mt-2">
-                    <input 
-                      type="radio" 
-                      name="visualization" 
-                      value="todo"
-                      checked={formData.tipoVisualizacion === 'todo'}
-                      onChange={(e) => setFormData({...formData, tipoVisualizacion: e.target.value})}
-                      className="mr-2" 
-                    />
-                    <span className="text-sm">Todo</span>
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className={`border-2 rounded-lg p-4 ${formData.tipoVisualizacion === 'total' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                    <div className="w-8 h-8 mx-auto mb-2 bg-gray-100 rounded"></div>
-                  </div>
-                  <div className="flex items-center justify-center mt-2">
-                    <input 
-                      type="radio" 
-                      name="visualization" 
-                      value="total"
-                      checked={formData.tipoVisualizacion === 'total'}
-                      onChange={(e) => setFormData({...formData, tipoVisualizacion: e.target.value})}
-                      className="mr-2" 
-                    />
-                    <span className="text-sm">Solo total</span>
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className={`border-2 rounded-lg p-4 ${formData.tipoVisualizacion === 'items' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                    <div className="w-8 h-8 mx-auto mb-2 bg-gray-100 rounded"></div>
-                  </div>
-                  <div className="flex items-center justify-center mt-2">
-                    <input 
-                      type="radio" 
-                      name="visualization" 
-                      value="items"
-                      checked={formData.tipoVisualizacion === 'items'}
-                      onChange={(e) => setFormData({...formData, tipoVisualizacion: e.target.value})}
-                      className="mr-2" 
-                    />
-                    <span className="text-sm">Solo ítems</span>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Summary */}
-          {items.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Resumen</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span>Items:</span>
-                    <span>{items.length}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Subtotal:</span>
-                    <span>{formatPrice(subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>IVA:</span>
-                    <span>{formatPrice(iva)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-lg border-t pt-2">
-                    <span>Total:</span>
-                    <span>{formatPrice(total)}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+              ))}
+            </div>
           )}
-        </div>
+
+          {items.length > 0 ? (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Cant</TableHead>
+                    <TableHead>Moneda entrada</TableHead>
+                    <TableHead>Moneda PDF</TableHead>
+                    <TableHead>Margen (%)</TableHead>
+                    <TableHead>Flete %</TableHead>
+                    <TableHead>Precio unit (PDF)</TableHead>
+                    <TableHead>IVA</TableHead>
+                    <TableHead>Flete</TableHead>
+                    <TableHead>Total</TableHead>
+                    <TableHead></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {items.map((item) => {
+                    const from = item.moneda || formData.monedaEntrada;
+                    const costoPdf = convertCurrency(
+                      Number.isFinite(item.costoCompra) ? Number(item.costoCompra) : 0,
+                      from,
+                      formData.monedaPdf,
+                      exchangeRates
+                    );
+                    const margenItem = Number.isFinite(item.margenItem) ? item.margenItem! : formData.margen;
+                    const precioVenta = costoPdf * (1 + margenItem / 100);
+                    const cantidad = Number.isFinite(item.cantidad) ? Number(item.cantidad) : 0;
+                    const netoItem = precioVenta * cantidad;
+                    const defaultPct = subtotal > 0 ? (netoItem / subtotal) * 100 : 0;
+                    const fletePct = Number.isFinite(item.fleteItem) ? Number(item.fleteItem) : defaultPct;
+                    const fleteMonto = netoItem * (fletePct / 100);
+                    const ivaItem = netoItem * (formData.iva / 100);
+                    const totalItem = netoItem + ivaItem + fleteMonto;
+                    return (
+                      <TableRow key={item.id}>
+                        <TableCell>
+                          <div className="font-medium">{item.nombre}</div>
+                          <div className="text-xs text-slate-500">{item.descripcion}</div>
+                        </TableCell>
+                        <TableCell>{item.cantidad}</TableCell>
+                        <TableCell>{item.moneda.toUpperCase()}</TableCell>
+                        <TableCell>{formData.monedaPdf.toUpperCase()}</TableCell>
+                        <TableCell className="max-w-[90px]">
+                          <Input
+                            type="number"
+                            value={Number.isFinite(item.margenItem) ? item.margenItem : formData.margen}
+                            onChange={(e) =>
+                              actualizarItem(item.id, { margenItem: toNumber(e.target.value) })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="max-w-[110px]">
+                          <Input
+                            type="number"
+                            value={fletePct}
+                            onChange={(e) =>
+                              actualizarItem(item.id, { fleteItem: toNumber(e.target.value) })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell>{formatPrice(precioVenta)}</TableCell>
+                        <TableCell>{formatPrice(ivaItem)}</TableCell>
+                        <TableCell>{formatPrice(fleteMonto)}</TableCell>
+                        <TableCell>{formatPrice(totalItem)}</TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="sm" onClick={() => eliminarItem(item.id)}>
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Agrega productos a la cotizacion.</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Notas y observaciones</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              placeholder="Introduccion o notas para el cliente"
+              rows={4}
+              value={formData.referencia}
+              onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
+            />
+            <Textarea placeholder="Nota interna" rows={3} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Resumen</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Moneda PDF</span>
+              <span className="font-medium">{formData.monedaPdf.toUpperCase()}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Neto</span>
+              <span>{formatPrice(subtotal)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>IVA ({formData.iva}%)</span>
+              <span>{formatPrice(ivaMonto)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Flete</span>
+              <span>{formatPrice(fleteTotal)}</span>
+            </div>
+            <div className="flex justify-between text-base font-semibold border-t pt-2">
+              <span>Total</span>
+              <span>{formatPrice(total)}</span>
+            </div>
+            <div className="pt-2 space-y-2">
+              <Button className="w-full" onClick={() => guardarCotizacion("borrador")}>Guardar</Button>
+              <Button className="w-full" variant="secondary" onClick={verPDF} disabled={!cotizacionActual}>
+                Descargar PDF
+              </Button>
+              <Button className="w-full" variant="secondary" onClick={handleGuardarYEnviar} disabled={!cotizacionActual}>
+                Guardar y enviar email
+              </Button>
+              <Button className="w-full" variant="outline" onClick={() => guardarCotizacion("enviada", true)} disabled={!cotizacionActual}>
+                Guardar y salir
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Action Buttons */}
-      <div className="flex justify-end space-x-4 mt-8">
-        <Button variant="outline" onClick={handleCrearYVisualizar}>
-          <Eye className="w-4 h-4 mr-2" />
-          Crear y Visualizar
-        </Button>
-        <Button onClick={handleCrearCotizacion} className="bg-green-600 hover:bg-green-700">
-          Crear
-        </Button>
-      </div>
+      <Dialog open={isProductoModal} onOpenChange={setIsProductoModal}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Nuevo producto</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <Input
+              placeholder="Nombre"
+              value={nuevoProducto.nombre}
+              onChange={(e) => setNuevoProducto({ ...nuevoProducto, nombre: e.target.value })}
+            />
+            <Input
+              placeholder="Codigo"
+              value={nuevoProducto.codigo}
+              onChange={(e) => setNuevoProducto({ ...nuevoProducto, codigo: e.target.value })}
+            />
+            <Input
+              placeholder="Proveedor"
+              value={nuevoProducto.proveedor}
+              onChange={(e) => setNuevoProducto({ ...nuevoProducto, proveedor: e.target.value })}
+            />
+            <Input
+              type="number"
+              placeholder="Plazo dias"
+              value={nuevoProducto.plazo || ""}
+              onChange={(e) => setNuevoProducto({ ...nuevoProducto, plazo: toNumber(e.target.value) })}
+            />
+            <Textarea
+              className="md:col-span-2"
+              placeholder="Descripcion"
+              value={nuevoProducto.descripcion}
+              onChange={(e) => setNuevoProducto({ ...nuevoProducto, descripcion: e.target.value })}
+            />
+            <div className="grid grid-cols-3 gap-2 md:col-span-2">
+              <div>
+                <Label>Costo</Label>
+                <Input
+                  type="number"
+                  value={nuevoProducto.costoCompra}
+                  onChange={(e) => setNuevoProducto({ ...nuevoProducto, costoCompra: toNumber(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label>Cantidad</Label>
+                <Input
+                  type="number"
+                  value={nuevoProducto.cantidad}
+                  onChange={(e) => setNuevoProducto({ ...nuevoProducto, cantidad: toNumber(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label>Moneda</Label>
+                <Select
+                  value={nuevoProducto.moneda}
+                  onValueChange={(v) => setNuevoProducto({ ...nuevoProducto, moneda: v as Moneda })}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="clp">CLP</SelectItem>
+                    <SelectItem value="usd">USD</SelectItem>
+                    <SelectItem value="eur">EUR</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <div className="flex justify-end">
+            <Button onClick={guardarProductoNuevo}>Guardar producto</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      {/* Preview Dialog */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Vista Previa de Cotización</DialogTitle>
+            <DialogTitle>Vista previa</DialogTitle>
           </DialogHeader>
-          {previewCotizacion && (
-            <div className="space-y-6 p-6 bg-white">
-              <div className="text-center border-b pb-4">
-                <h2 className="text-2xl font-bold">COTIZACIÓN</h2>
-                <p className="text-lg">N° {previewCotizacion.numero}</p>
-                <p className="text-sm text-gray-600">Fecha: {new Date(previewCotizacion.fecha).toLocaleDateString('es-CL')}</p>
+          {cotizacionActual ? (
+            <div className="space-y-3">
+              <div className="flex justify-between">
+                <div>
+                  <div className="font-semibold">{cotizacionActual.cliente?.nombre}</div>
+                  <div className="text-sm text-slate-500">{cotizacionActual.cliente?.rut}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-sm">Numero: {cotizacionActual.numero}</div>
+                  <div className="text-sm">Fecha: {cotizacionActual.fecha}</div>
+                </div>
               </div>
 
-              {previewCotizacion.cliente && (
-                <div>
-                  <h3 className="font-semibold mb-2">Cliente:</h3>
-                  <p>{previewCotizacion.cliente.nombre}</p>
-                  <p>RUT: {previewCotizacion.cliente.rut}</p>
-                  <p>Email: {previewCotizacion.cliente.email}</p>
-                </div>
-              )}
-
-              <div>
-                <h3 className="font-semibold mb-2">Detalle:</h3>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Descripción</TableHead>
-                      <TableHead>Cantidad</TableHead>
-                      <TableHead>Costo Neto</TableHead>
-                        <TableHead>Precio Venta</TableHead>
-                      <TableHead>Total</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {previewCotizacion.items.map(item => (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Producto</TableHead>
+                    <TableHead>Cant</TableHead>
+                    <TableHead>Moneda entrada</TableHead>
+                    <TableHead>Moneda PDF</TableHead>
+                    <TableHead>Margen (%)</TableHead>
+                    <TableHead>Flete %</TableHead>
+                    <TableHead>IVA</TableHead>
+                    <TableHead>Flete</TableHead>
+                    <TableHead>Precio</TableHead>
+                    <TableHead>Total</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {cotizacionActual.items.map((item) => {
+                    const from = item.moneda || formData.monedaEntrada;
+                    const costoPdf = convertCurrency(
+                      Number.isFinite(item.costoCompra) ? Number(item.costoCompra) : 0,
+                      from,
+                      formData.monedaPdf,
+                      exchangeRates
+                    );
+                    const margenItem = Number.isFinite(item.margenItem) ? item.margenItem! : formData.margen;
+                    const precioVenta = costoPdf * (1 + margenItem / 100);
+                    const cantidad = Number.isFinite(item.cantidad) ? Number(item.cantidad) : 0;
+                    const netoItem = precioVenta * cantidad;
+                    const defaultPct = subtotal > 0 ? (netoItem / subtotal) * 100 : 0;
+                    const fletePct = Number.isFinite(item.fleteItem) ? Number(item.fleteItem) : defaultPct;
+                    const fleteMonto = netoItem * (fletePct / 100);
+                    const ivaItem = netoItem * (formData.iva / 100);
+                    const totalItem = netoItem + ivaItem + fleteMonto;
+                    return (
                       <TableRow key={item.id}>
                         <TableCell>{item.nombre}</TableCell>
                         <TableCell>{item.cantidad}</TableCell>
-                        <TableCell>{formatPrice(item.precio)}</TableCell>
-                        <TableCell>{formatPrice(item.precio * (1 + margenGanancia / 100))}</TableCell>
-                        <TableCell>{formatPrice(item.precio * (1 + margenGanancia / 100) * item.cantidad)}</TableCell>
+                        <TableCell>{item.moneda.toUpperCase()}</TableCell>
+                        <TableCell>{formData.monedaPdf.toUpperCase()}</TableCell>
+                        <TableCell>{Number.isFinite(item.margenItem) ? item.margenItem : formData.margen}%</TableCell>
+                        <TableCell>{fletePct}%</TableCell>
+                        <TableCell>{formatPrice(ivaItem)}</TableCell>
+                        <TableCell>{formatPrice(fleteMonto)}</TableCell>
+                        <TableCell>{formatPrice(precioVenta)}</TableCell>
+                        <TableCell>{formatPrice(totalItem)}</TableCell>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+
+            <div className="flex flex-col items-end space-y-1">
+              <div className="flex justify-between w-64 text-sm">
+                <span>Neto</span>
+                <span>{formatPrice(subtotal)}</span>
+              </div>
+              <div className="flex justify-between w-64 text-sm">
+                <span>IVA ({formData.iva}%)</span>
+                <span>{formatPrice(ivaMonto)}</span>
+              </div>
+              <div className="flex justify-between w-64 text-sm">
+                <span>Flete</span>
+                <span>{formatPrice(fleteTotal)}</span>
+              </div>
+              <div className="flex justify-between w-64 text-base font-semibold">
+                <span>Total</span>
+                <span>{formatPrice(total)}</span>
+              </div>
               </div>
 
-              <div className="border-t pt-4 text-right space-y-2">
-                <div>Subtotal: {formatPrice(previewCotizacion.subtotal)}</div>
-                <div>IVA (19%): {formatPrice(previewCotizacion.iva)}</div>
-                {previewCotizacion.incluirFlete && (
-                  <div>Flete: {formatPrice(previewCotizacion.flete)}</div>
-                )}
-                <div className="text-xl font-bold">Total: {formatPrice(previewCotizacion.total)}</div>
-              </div>
-
-
-              <CotizacionActions
-                cotizacion={{
-                  cliente: previewCotizacion.cliente?.nombre || '',
-                  rut: previewCotizacion.cliente?.rut || '',
-                  direccion: previewCotizacion.cliente?.direccion || '',
-                  email: previewCotizacion.cliente?.email || '',
-                  telefono: previewCotizacion.cliente?.telefono || '',
-                  productos: previewCotizacion.items.map(item => ({
-                    nombre: item.nombre,
-                    costoCompra: item.precio,
-                    cantidad: item.cantidad
-                  })),
-                  margen: margenGanancia,
-                  flete: previewCotizacion.flete,
-                  incluirFlete: previewCotizacion.incluirFlete,
-                  numeroCotizacion: previewCotizacion.numero,
-                  fecha: previewCotizacion.fecha
-                }}
-              />
-
-              <div className="flex justify-end space-x-2 pt-4">
-                <Button variant="outline" onClick={() => setIsPreviewOpen(false)}>
-                  Cerrar
-                </Button>
-                <Button onClick={() => navigate('/cotizaciones')} className="bg-blue-600 hover:bg-blue-700">
-                  Ir a Cotizaciones
-                </Button>
-              </div>
+              <CotizacionActions cotizacion={{
+                cliente: cotizacionActual.cliente?.nombre,
+                rut: cotizacionActual.cliente?.rut,
+                direccion: cotizacionActual.cliente?.direccion,
+                email: cotizacionActual.cliente?.email,
+                telefono: cotizacionActual.cliente?.telefono,
+                productos: cotizacionActual.items,
+                margen: formData.margen,
+                flete: fleteTotal,
+                incluirFlete: true,
+                numeroCotizacion: cotizacionActual.numero,
+                fecha: cotizacionActual.fecha,
+                monedaPdf: formData.monedaPdf,
+                exchangeRates,
+              }} />
             </div>
+          ) : (
+            <p className="text-sm text-slate-500">Falta info para mostrar la vista previa.</p>
           )}
         </DialogContent>
       </Dialog>

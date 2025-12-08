@@ -1,0 +1,247 @@
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Table, TableHead, TableRow, TableCell, TableBody, TableHeader } from "@/components/ui/table";
+import { Plus } from "lucide-react";
+
+interface Producto {
+  nombre: string;
+  proveedor: string;
+  rutProveedor: string;
+  plazoDias: number;
+  cantidad: number;
+  moneda: string;
+  valorUnitarioOrigen: number;
+  valorUnitarioCLP: number;
+  valorNeto: number;
+  valorIVA: number;
+  valorTotal: number;
+}
+
+export default function CrearCotizacion() {
+  const [modalOpen, setModalOpen] = useState(false);
+  const [productos, setProductos] = useState<Producto[]>([]);
+
+  const [nuevoProducto, setNuevoProducto] = useState<Producto>({
+    nombre: "",
+    proveedor: "",
+    rutProveedor: "",
+    plazoDias: 0,
+    cantidad: 1,
+    moneda: "CLP",
+    valorUnitarioOrigen: 0,
+    valorUnitarioCLP: 0,
+    valorNeto: 0,
+    valorIVA: 0,
+    valorTotal: 0,
+  });
+
+  // ✅ Recalcular valores automáticos
+  const recalcularValores = (data: Producto) => {
+    const neto = data.cantidad * data.valorUnitarioCLP;
+    const iva = neto * 0.19;
+    const total = neto + iva;
+
+    return {
+      ...data,
+      valorNeto: neto,
+      valorIVA: iva,
+      valorTotal: total,
+    };
+  };
+
+  // ✅ Agregar producto a la cotización (NO crear múltiples en el modal)
+  const agregarProducto = () => {
+    const productoFinal = recalcularValores(nuevoProducto);
+    setProductos([...productos, productoFinal]);
+
+    // Reset limpio
+    setNuevoProducto({
+      nombre: "",
+      proveedor: "",
+      rutProveedor: "",
+      plazoDias: 0,
+      cantidad: 1,
+      moneda: "CLP",
+      valorUnitarioOrigen: 0,
+      valorUnitarioCLP: 0,
+      valorNeto: 0,
+      valorIVA: 0,
+      valorTotal: 0,
+    });
+
+    setModalOpen(false);
+  };
+
+  return (
+    <div className="p-6 space-y-6">
+
+      {/* ✅ BOTÓN CREAR PRODUCTO */}
+      <div className="flex justify-end">
+        <Button onClick={() => setModalOpen(true)}>
+          <Plus className="w-4 h-4 mr-2" />
+          Crear Producto
+        </Button>
+      </div>
+
+      {/* ✅ TABLA PRODUCTOS AGREGADOS A LA COTIZACIÓN */}
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead>Producto</TableHead>
+            <TableHead>Cant</TableHead>
+            <TableHead>Proveedor</TableHead>
+            <TableHead>Plazo</TableHead>
+            <TableHead>Moneda</TableHead>
+            <TableHead>Valor Neto</TableHead>
+            <TableHead>IVA</TableHead>
+            <TableHead>Total</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {productos.map((p, i) => (
+            <TableRow key={i}>
+              <TableCell>{p.nombre}</TableCell>
+              <TableCell>{p.cantidad}</TableCell>
+              <TableCell>{p.proveedor}</TableCell>
+              <TableCell>{p.plazoDias} días</TableCell>
+              <TableCell>{p.moneda}</TableCell>
+              <TableCell>${p.valorNeto.toLocaleString()}</TableCell>
+              <TableCell>${p.valorIVA.toLocaleString()}</TableCell>
+              <TableCell>${p.valorTotal.toLocaleString()}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+
+      {/* ✅ MODAL AGREGAR PRODUCTO */}
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Agregar Producto</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid grid-cols-3 gap-4">
+
+            <Input
+              placeholder="Nombre producto"
+              value={nuevoProducto.nombre}
+              onChange={(e) =>
+                setNuevoProducto({ ...nuevoProducto, nombre: e.target.value })
+              }
+            />
+
+            <Input
+              placeholder="Nombre proveedor"
+              value={nuevoProducto.proveedor}
+              onChange={(e) =>
+                setNuevoProducto({ ...nuevoProducto, proveedor: e.target.value })
+              }
+            />
+
+            <Input
+              placeholder="RUT proveedor"
+              value={nuevoProducto.rutProveedor}
+              onChange={(e) =>
+                setNuevoProducto({
+                  ...nuevoProducto,
+                  rutProveedor: e.target.value,
+                })
+              }
+            />
+
+            <Input
+              type="number"
+              placeholder="Plazo en días"
+              value={nuevoProducto.plazoDias == 0 ? "" : nuevoProducto.plazoDias}
+              onChange={(e) =>
+                setNuevoProducto({
+                  ...nuevoProducto,
+                  plazoDias: Number(e.target.value),
+                })
+              }
+            />
+
+            <Input
+              type="number"
+              placeholder="Cantidad"
+              value={nuevoProducto.cantidad == 0 ? "" : nuevoProducto.cantidad}
+              onChange={(e) =>
+                setNuevoProducto({
+                  ...nuevoProducto,
+                  cantidad: Number(e.target.value),
+                })
+              }
+            />
+
+            <Select
+              value={nuevoProducto.moneda}
+              onValueChange={(value) =>
+                setNuevoProducto({ ...nuevoProducto, moneda: value })
+              }
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Moneda" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="CLP">CLP</SelectItem>
+                <SelectItem value="USD">USD</SelectItem>
+                <SelectItem value="EUR">EUR</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Input
+              type="number"
+              placeholder="Valor unitario (origen)"
+              value={nuevoProducto.valorUnitarioOrigen == 0 ? "" : nuevoProducto.valorUnitarioOrigen}
+              onChange={(e) =>
+                setNuevoProducto({
+                  ...nuevoProducto,
+                  valorUnitarioOrigen: Number(e.target.value),
+                  valorUnitarioCLP: Number(e.target.value),
+                })
+              }
+            />
+
+            <Input
+              type="number"
+              placeholder="Valor unitario (CLP)"
+              value={nuevoProducto.valorUnitarioCLP == 0 ? "" : nuevoProducto.valorUnitarioCLP}
+              onChange={(e) =>
+                setNuevoProducto({
+                  ...nuevoProducto,
+                  valorUnitarioCLP: Number(e.target.value),
+                })
+              }
+            />
+
+            <Input
+              readOnly
+              placeholder="Valor Neto (auto)"
+              value={
+                nuevoProducto.cantidad * nuevoProducto.valorUnitarioCLP
+              }
+            />
+          </div>
+
+          <div className="flex justify-end pt-6">
+            <Button onClick={agregarProducto}>Agregar Producto</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

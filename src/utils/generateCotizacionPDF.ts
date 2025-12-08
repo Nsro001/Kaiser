@@ -12,13 +12,13 @@ async function toBase64(url: string): Promise<string> {
       canvas.width = img.width;
       canvas.height = img.height;
       const ctx = canvas.getContext("2d");
-      ctx.drawImage(img, 0, 0);
+      ctx?.drawImage(img, 0, 0);
       resolve(canvas.toDataURL("image/png"));
     };
   });
 }
 
-export const generateCotizacionPDF = async (data) => {
+export const generateCotizacionPDF = async (data: any) => {
   const {
     cliente,
     rut,
@@ -31,7 +31,11 @@ export const generateCotizacionPDF = async (data) => {
     incluirFlete,
     numeroCotizacion,
     fecha,
+    monedaPdf = "clp",
+    exchangeRates = { clp: 1, usd: 900, eur: 1000 },
   } = data;
+
+  const fleteMonto = incluirFlete ? Number(flete) || 0 : 0;
 
   // Cargar logos
   const logoHeader = await toBase64("/logo-header.png");
@@ -39,11 +43,15 @@ export const generateCotizacionPDF = async (data) => {
 
   // TABLA DE PRODUCTOS
   let subtotal = 0;
-  const items = [];
+  const items: any[] = [];
 
-  productos.forEach((p, index) => {
+  productos.forEach((p: any, index: number) => {
     const costo = Number(p.costoCompra);
-    const precio = costo + costo * (margen / 100);
+    const entradaRate = exchangeRates[p.moneda || "clp"] || 1;
+    const pdfRate = exchangeRates[monedaPdf] || 1;
+    const costoEnPDF = (costo * entradaRate) / pdfRate;
+    const margenItem = Number.isFinite(p.margenItem) ? Number(p.margenItem) : margen;
+    const precio = costoEnPDF * (1 + margenItem / 100);
     const total = precio * p.cantidad;
     subtotal += total;
 
@@ -53,81 +61,93 @@ export const generateCotizacionPDF = async (data) => {
       p.nombre || "",
       p.descripcion || "",
       p.cantidad,
-      `$ ${precio.toLocaleString("es-CL")}`,
-      `$ ${total.toLocaleString("es-CL")}`,
+      `$ ${Math.round(precio).toLocaleString("es-CL")}`,
+      `$ ${Math.round(total).toLocaleString("es-CL")}`,
     ]);
   });
 
-  const iva = subtotal * 0.19;
-  const totalGeneral = subtotal + iva + (incluirFlete ? flete : 0);
+  const subtotalRounded = Math.round(subtotal);
+  const ivaRounded = Math.round(subtotal * 0.19);
+  const fleteRounded = Math.round(fleteMonto);
+  const totalGeneralRounded = subtotalRounded + ivaRounded + fleteRounded;
 
-  // DEFINICIÓN DEL PDF
   const docDefinition: any = {
     pageMargins: [40, 120, 40, 80],
 
     header: {
       margin: [40, 30, 40, 0],
-      columns: [
-        {
-          width: "60%",
-          stack: [
-            { image: logoHeader, width: 140, margin: [0, 0, 0, 10] },
-            { text: "Nombre Empresa", bold: true, fontSize: 11 },
-            { text: "Ejecutivo : Nombre Ejecutivo", fontSize: 10 },
-            { text: `Email : ${email}`, fontSize: 10 },
-            { text: `Teléfono : ${telefono}`, fontSize: 10 },
-            { text: "Rubro : Tecnología", fontSize: 10 },
-            { text: `Rut : ${rut}`, fontSize: 10 },
-            { text: "www.cotizacion-web.com", fontSize: 10 },
-          ],
-        },
-        {
-          width: "40%",
-          stack: [
+      table: {
+        widths: [80, "*", 220],
+        body: [
+          [
             {
-              table: {
-                widths: ["*"],
-                body: [
-                  [
-                    {
-                      text: "N° COTIZACIÓN\n" + numeroCotizacion,
-                      bold: true,
-                      alignment: "center",
-                      fontSize: 14,
-                      margin: [0, 10],
-                    },
-                  ],
-                ],
-              },
-              layout: "lightHorizontalLines",
+              image: logoHeader,
+              width: 80,
+              alignment: "left",
+              border: [false, false, false, false],
             },
             {
-              table: {
-                widths: ["*"],
-                body: [
-                  [
-                    {
-                      text: "Fecha: " + fecha,
-                      alignment: "right",
-                      margin: [0, 5],
-                    },
-                  ],
-                ],
-              },
-              layout: "noBorders",
+              stack: [
+                { text: "Nombre Empresa", bold: true, fontSize: 11 },
+                { text: "Ejecutivo : Nombre Ejecutivo", fontSize: 10 },
+                { text: `Email : ${email || ""}`, fontSize: 10 },
+                { text: `Telefono : ${telefono || ""}`, fontSize: 10 },
+                { text: "Rubro : Tecnologia", fontSize: 10 },
+                { text: `Rut : ${rut || ""}`, fontSize: 10 },
+                { text: "www.cotizacion-web.com", fontSize: 10 },
+              ],
+              border: [false, false, false, false],
+            },
+            {
+              stack: [
+                {
+                  table: {
+                    widths: ["*"],
+                    body: [
+                      [
+                        {
+                          text: `N° COTIZACION\n${numeroCotizacion}`,
+                          bold: true,
+                          alignment: "center",
+                          fontSize: 14,
+                          margin: [0, 10],
+                        },
+                      ],
+                    ],
+                  },
+                  layout: "lightHorizontalLines",
+                },
+                {
+                  table: {
+                    widths: ["*"],
+                    body: [
+                      [
+                        {
+                          text: "Fecha: " + fecha,
+                          alignment: "right",
+                          margin: [0, 5],
+                        },
+                      ],
+                    ],
+                  },
+                  layout: "noBorders",
+                },
+              ],
+              border: [false, false, false, false],
             },
           ],
-        },
-      ],
+        ],
+      },
+      layout: "noBorders",
     },
 
-    footer: function (currentPage, pageCount) {
+    footer: function (currentPage: number, pageCount: number) {
       return {
         margin: [40, 0, 40, 20],
         columns: [
           { image: logoFooter, width: 100 },
           {
-            text: "Página " + currentPage + "/" + pageCount,
+            text: "Pagina " + currentPage + "/" + pageCount,
             alignment: "right",
             fontSize: 9,
           },
@@ -144,15 +164,15 @@ export const generateCotizacionPDF = async (data) => {
             [
               {
                 stack: [
-                  { text: `Nombre Empresa : ${cliente}`, fontSize: 10 },
-                  { text: `RUT : ${rut}`, fontSize: 10 },
-                  { text: `Correo : ${email}`, fontSize: 10 },
+                  { text: `Nombre Empresa : ${cliente || ""}`, fontSize: 10 },
+                  { text: `RUT : ${rut || ""}`, fontSize: 10 },
+                  { text: `Correo : ${email || ""}`, fontSize: 10 },
                 ],
               },
               {
                 stack: [
-                  { text: `Nombre : ${cliente}`, fontSize: 10 },
-                  { text: `Teléfono : ${telefono}`, fontSize: 10 },
+                  { text: `Direccion : ${direccion || ""}`, fontSize: 10 },
+                  { text: `Telefono : ${telefono || ""}`, fontSize: 10 },
                 ],
               },
             ],
@@ -160,7 +180,7 @@ export const generateCotizacionPDF = async (data) => {
         },
       },
 
-      { text: "Introducción predeterminada", margin: [0, 0, 0, 10] },
+      { text: "Introduccion predeterminada", margin: [0, 0, 0, 10] },
 
       {
         table: {
@@ -169,9 +189,9 @@ export const generateCotizacionPDF = async (data) => {
           body: [
             [
               { text: "#", bold: true },
-              { text: "Código", bold: true },
+              { text: "Codigo", bold: true },
               { text: "Servicio / Producto", bold: true },
-              { text: "Descripción", bold: true },
+              { text: "Descripcion", bold: true },
               { text: "Cantidad", bold: true },
               { text: "Valor", bold: true },
               { text: "Total", bold: true },
@@ -180,7 +200,7 @@ export const generateCotizacionPDF = async (data) => {
           ],
         },
         layout: {
-          fillColor: (rowIndex) => (rowIndex === 0 ? "#f0f0f0" : null),
+          fillColor: (rowIndex: number) => (rowIndex === 0 ? "#f0f0f0" : null),
         },
       },
 
@@ -188,44 +208,30 @@ export const generateCotizacionPDF = async (data) => {
         margin: [0, 20, 0, 10],
         alignment: "right",
         table: {
-          widths: ["*", 100],
+          widths: ["*", 120],
           body: [
             ["Moneda :", "Peso Chileno"],
-            ["Neto :", `$ ${subtotal.toLocaleString("es-CL")}`],
-            ["IVA (19%) :", `$ ${iva.toLocaleString("es-CL")}`],
-            ["Flete :", incluirFlete ? `$ ${flete.toLocaleString("es-CL")}` : "$ 0"],
+            ["Neto :", `$ ${subtotalRounded.toLocaleString("es-CL")}`],
+            ["IVA (19%) :", `$ ${ivaRounded.toLocaleString("es-CL")}`],
+            ["Flete :", `$ ${fleteRounded.toLocaleString("es-CL")}`],
             [
               { text: "Total :", bold: true },
-              { text: `$ ${totalGeneral.toLocaleString("es-CL")}`, bold: true },
+              { text: `$ ${totalGeneralRounded.toLocaleString("es-CL")}`, bold: true },
             ],
           ],
         },
       },
 
-      { text: "conclusión predeterminada", margin: [0, 40, 0, 10] },
+      { text: "Conclusion predeterminada", margin: [0, 40, 0, 10] },
     ],
   };
 
-  // Cargar pdfMake desde CDN
   const pdfMake = await getPdfMake();
   if (!pdfMake) {
-    console.error("pdfMake no está listo. Asegúrate que el CDN está al final del <body>.");
+    console.error("pdfMake no esta listo. Revisa la carga del CDN.");
     return;
   }
 
   const pdfDoc = pdfMake.createPdf(docDefinition);
-
-  // DESCARGA LOCAL
-  pdfDoc.download("cotizacion.pdf");
-
-  // ENVÍO POR EMAIL (BACKEND RENDER)
-  if (pdfDoc.getBase64) {
-    pdfDoc.getBase64(async (base64) => {
-      console.log("Enviando PDF al backend...");
-      const resp = await sendEmailToBackend(base64, email);
-      console.log("Respuesta backend:", resp);
-    });
-  } else {
-    console.error("getBase64 no existe. pdfMake NO se está cargando desde CDN.");
-  }
+  return pdfDoc;
 };
