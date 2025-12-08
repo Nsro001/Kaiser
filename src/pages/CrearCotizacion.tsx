@@ -752,11 +752,11 @@ export default function CrearCotizacion() {
                     const totalItem = netoItem + ivaItem + fleteMonto;
                     return (
                       <TableRow key={item.id}>
-                        <TableCell>
-                          <div className="font-medium">{item.nombre}</div>
-                          <div className="text-xs text-slate-500">{item.descripcion}</div>
+                        <TableCell className="max-w-[200px] whitespace-normal break-words">
+                          <div className="font-medium break-words">{item.nombre}</div>
+                          <div className="text-xs text-slate-500 break-words">{item.descripcion}</div>
                         </TableCell>
-                        <TableCell>{item.cantidad}</TableCell>
+                        <TableCell className="text-right">{item.cantidad}</TableCell>
                         <TableCell>{(item.moneda || formData.monedaEntrada).toUpperCase()}</TableCell>
                         <TableCell>{formData.monedaPdf.toUpperCase()}</TableCell>
                         <TableCell className="max-w-[90px]">
@@ -777,10 +777,10 @@ export default function CrearCotizacion() {
                             }
                           />
                         </TableCell>
-                        <TableCell>{formatPrice(precioVenta)}</TableCell>
-                        <TableCell>{formatPrice(ivaItem)}</TableCell>
-                        <TableCell>{formatPrice(fleteMonto)}</TableCell>
-                        <TableCell>{formatPrice(totalItem)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(precioVenta)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(ivaItem)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(fleteMonto)}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatPrice(totalItem)}</TableCell>
                         <TableCell>
                           <Button variant="ghost" size="sm" onClick={() => eliminarItem(item.id)}>
                             <Trash2 className="w-4 h-4" />
@@ -980,16 +980,16 @@ export default function CrearCotizacion() {
                     const totalItem = netoItem + ivaItem + fleteMonto;
                     return (
                       <TableRow key={item.id}>
-                        <TableCell>{item.nombre}</TableCell>
-                        <TableCell>{item.cantidad}</TableCell>
+                        <TableCell className="max-w-[200px] whitespace-normal break-words">{item.nombre}</TableCell>
+                        <TableCell className="text-right">{item.cantidad}</TableCell>
                         <TableCell>{(item.moneda || formData.monedaEntrada).toUpperCase()}</TableCell>
                         <TableCell>{formData.monedaPdf.toUpperCase()}</TableCell>
                         <TableCell>{Number.isFinite(item.margenItem) ? item.margenItem : formData.margen}%</TableCell>
                         <TableCell>{fletePct}%</TableCell>
-                        <TableCell>{formatPrice(ivaItem)}</TableCell>
-                        <TableCell>{formatPrice(fleteMonto)}</TableCell>
-                        <TableCell>{formatPrice(precioVenta)}</TableCell>
-                        <TableCell>{formatPrice(totalItem)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(ivaItem)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(fleteMonto)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(precioVenta)}</TableCell>
+                        <TableCell className="text-right font-semibold">{formatPrice(totalItem)}</TableCell>
                       </TableRow>
                     );
                   })}

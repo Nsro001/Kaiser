@@ -88,13 +88,8 @@ export const generateCotizacionPDF = async (data: any) => {
             },
             {
               stack: [
-                { text: "Nombre Empresa", bold: true, fontSize: 11 },
-                { text: "Ejecutivo : Nombre Ejecutivo", fontSize: 10 },
-                { text: `Email : ${email || ""}`, fontSize: 10 },
-                { text: `Telefono : ${telefono || ""}`, fontSize: 10 },
-                { text: "Rubro : Tecnologia", fontSize: 10 },
-                { text: `Rut : ${rut || ""}`, fontSize: 10 },
-                { text: "www.cotizacion-web.com", fontSize: 10 },
+                { text: "Kaiser Ingeniería", bold: true, fontSize: 12 },
+                { text: "www.kaiseringenieria.cl", fontSize: 10 },
               ],
               border: [false, false, false, false],
             },
@@ -222,7 +217,17 @@ export const generateCotizacionPDF = async (data: any) => {
         },
       },
 
-      { text: "Conclusion predeterminada", margin: [0, 40, 0, 10] },
+      {
+        margin: [0, 30, 0, 10],
+        stack: [
+          { text: "Atentamente,", margin: [0, 0, 0, 5] },
+          { text: "Héctor Dinamarca", bold: true, fontSize: 11 },
+          { text: "CEO - Kaiser Ingeniería", fontSize: 10 },
+          { text: "Correo: cotizaciones@kaiseringenieria.cl", fontSize: 10 },
+        ],
+      },
+
+      { text: "Conclusion predeterminada", margin: [0, 20, 0, 10] },
     ],
   };
 
