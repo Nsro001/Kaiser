@@ -1,37 +1,42 @@
-import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { MailerSend, EmailParams, Sender, Recipient } from "mailersend";
+import type { VercelRequest, VercelResponse } from "vercel";
+import nodemailer from "nodemailer";
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(
+  req: VercelRequest,
+  res: VercelResponse
+) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Método no permitido" });
   }
 
   try {
-    const { to, subject, message } = req.body;
+    const { to, subject, html, attachments } = req.body;
 
-    if (!to) {
-      return res.status(400).json({ error: "Falta destinatario" });
-    }
-
-    const client = new MailerSend({
-      apiKey: process.env.MAILERSEND_API_KEY || "",
+    const transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT), // 587
+      secure: false, // ✅ CORRECTO PARA 587
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
     });
 
-    const from = new Sender("cotizaciones@kaiseringenieria.cl", "Kaiser Ingeniería");
-    const recipients = [new Recipient(to, "")];
+    const info = await transporter.sendMail({
+      from: `"${process.env.SMTP_FROM_NAME}" <${process.env.SMTP_FROM}>`,
+      to,
+      replyTo: process.env.SMTP_REPLY_TO,
+      subject,
+      html,
+      attachments, // opcional (PDF)
+    });
 
-    const params = new EmailParams()
-      .setFrom(from)
-      .setTo(recipients)
-      .setSubject(subject || "Cotización Kaiser Ingeniería")
-      .setHtml(message || "<p>Mensaje vacío</p>");
-
-    const result = await client.email.send(params);
-
-    return res.status(200).json({ ok: true, result });
-
-  } catch (error: any) {
-    console.error("MAILERSEND ERROR:", error?.response?.body || error);
+    return res.status(200).json({
+      ok: true,
+      messageId: info.messageId,
+    });
+  } catch (error) {
+    console.error("Error enviando correo:", error);
     return res.status(500).json({ error: "Error enviando correo" });
   }
 }
