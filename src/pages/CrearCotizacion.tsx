@@ -455,7 +455,10 @@ export default function CrearCotizacion() {
               numero: num,
             }),
           });
-          if (!res.ok) throw new Error("Error enviando correo");
+          if (!res.ok) {
+            const data = await res.json().catch(() => ({}));
+            throw new Error(data?.error || "Error enviando correo");
+          }
           toast.success("Correo enviado con PDF adjunto");
         } catch (err) {
           console.error(err);

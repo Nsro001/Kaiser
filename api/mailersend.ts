@@ -27,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const replyTo = process.env.SMTP_REPLY_TO || fromEmail;
 
     if (!user || !pass) {
-      return res.status(500).json({ error: "SMTP no configurado" });
+      return res.status(500).json({ error: "SMTP no configurado (faltan SMTP_USER o SMTP_PASS)" });
     }
 
     const transporter = nodemailer.createTransport({
@@ -55,8 +55,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     return res.status(200).json({ ok: true });
-  } catch (err) {
+  } catch (err: any) {
     console.error("ERROR enviando correo:", err);
-    return res.status(500).json({ error: "Error enviando correo" });
+    const message = err?.message || "Error enviando correo";
+    return res.status(500).json({ error: message });
   }
 }
