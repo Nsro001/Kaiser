@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -478,7 +478,12 @@ export default function CrearCotizacion() {
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Crear Cotizacion</h1>
+        <div className="flex items-center gap-3">
+          <Link to="/" className="text-sm text-blue-600 hover:underline">
+            ← Volver al Dashboard
+          </Link>
+          <h1 className="text-2xl font-semibold">Crear Cotizacion</h1>
+        </div>
         <div className="space-x-2">
           <Button variant="outline" onClick={() => setShowProductos((s) => !s)}>
             {showProductos ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
@@ -685,7 +690,7 @@ export default function CrearCotizacion() {
                   <div>
                     <div className="font-medium">{p.nombre}</div>
                     <div className="text-xs text-slate-500">
-                      {p.moneda.toUpperCase()} {formatPrice(p.costoCompra).replace("$", "")} · Cant: {p.cantidad}
+                      {(p.moneda || formData.monedaEntrada).toUpperCase()} {formatPrice(p.costoCompra).replace("$", "")} · Cant: {p.cantidad}
                     </div>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => agregarItem(p)}>
@@ -739,7 +744,7 @@ export default function CrearCotizacion() {
                           <div className="text-xs text-slate-500">{item.descripcion}</div>
                         </TableCell>
                         <TableCell>{item.cantidad}</TableCell>
-                        <TableCell>{item.moneda.toUpperCase()}</TableCell>
+                        <TableCell>{(item.moneda || formData.monedaEntrada).toUpperCase()}</TableCell>
                         <TableCell>{formData.monedaPdf.toUpperCase()}</TableCell>
                         <TableCell className="max-w-[90px]">
                           <Input
@@ -964,7 +969,7 @@ export default function CrearCotizacion() {
                       <TableRow key={item.id}>
                         <TableCell>{item.nombre}</TableCell>
                         <TableCell>{item.cantidad}</TableCell>
-                        <TableCell>{item.moneda.toUpperCase()}</TableCell>
+                        <TableCell>{(item.moneda || formData.monedaEntrada).toUpperCase()}</TableCell>
                         <TableCell>{formData.monedaPdf.toUpperCase()}</TableCell>
                         <TableCell>{Number.isFinite(item.margenItem) ? item.margenItem : formData.margen}%</TableCell>
                         <TableCell>{fletePct}%</TableCell>
