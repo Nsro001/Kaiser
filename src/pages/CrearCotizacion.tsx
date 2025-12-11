@@ -19,6 +19,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import {
   Card,
@@ -50,6 +51,16 @@ const defaultExchange = { clp: 1, usd: 900, eur: 1000 };
 
 type Moneda = "clp" | "usd" | "eur";
 
+type TipoFlete = "nacional" | "internacional";
+
+interface FleteItem {
+  descripcion: string;
+  proveedor: string;
+  rut: string;
+  moneda: Moneda;
+  valorEstimado: number;
+}
+
 interface Cliente {
   id: string;
   nombre: string;
@@ -71,6 +82,7 @@ interface Producto {
   plazo?: number;
   margenItem?: number;
   fleteItem?: number; // porcentaje de flete
+  ctoFinanciero?: number; // porcentaje de costo financiero
 }
 
 interface CotizacionGuardada {
@@ -91,6 +103,32 @@ interface CotizacionGuardada {
   exchangeRates: typeof defaultExchange;
 }
 
+const defaultFleteInternacionalItems: FleteItem[] = [
+  { descripcion: "Factura Proveedor", proveedor: "", rut: "", moneda: "eur", valorEstimado: 118026 },
+  { descripcion: "Flete hasta C&F", proveedor: "", rut: "", moneda: "eur", valorEstimado: 8000 },
+  { descripcion: "Seguro", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Gastos EXW Europa", proveedor: "", rut: "", moneda: "eur", valorEstimado: 975 },
+  { descripcion: "Gtos. Bancarios Transf.", proveedor: "", rut: "", moneda: "eur", valorEstimado: 200 },
+  { descripcion: "Almacenaje Fiscal", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Honorarios Ag. Aduana", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Gastos Despachante", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Gastos portuarios", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Gastos de Comodato", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Desconsolidacion", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Confeccion de CDA", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Almacenaje", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Poliza seguro cont", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Gate in", proveedor: "", rut: "", moneda: "eur", valorEstimado: 380 },
+  { descripcion: "Demurrage contenedor", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Valorizacion B/L", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+  { descripcion: "Apertura Manifiesto", proveedor: "", rut: "", moneda: "eur", valorEstimado: 150 },
+  { descripcion: "Flete hasta bodega", proveedor: "", rut: "", moneda: "eur", valorEstimado: 410 },
+];
+
+const defaultFleteNacionalItems: FleteItem[] = [
+  { descripcion: "Flete Mercaderia", proveedor: "Nacional", rut: "N/A", moneda: "eur", valorEstimado: 3000 },
+  { descripcion: "Movilizacion", proveedor: "", rut: "", moneda: "eur", valorEstimado: 0 },
+];
 const today = new Date().toISOString().split("T")[0];
 
 const getCounter = () => Number(localStorage.getItem("contador_cotizaciones") || "1");
@@ -125,6 +163,11 @@ const formatPrice = (value: number) =>
     maximumFractionDigits: 0,
   }).format(Math.round(Number.isFinite(value) ? value : 0));
 
+const safeDivide = (numerator: number, denominator: number) => {
+  if (!Number.isFinite(denominator) || denominator === 0) return 0;
+  return numerator / denominator;
+};
+
 export default function CrearCotizacion() {
   const navigate = useNavigate();
 
@@ -133,6 +176,10 @@ export default function CrearCotizacion() {
   const [items, setItems] = useState<Producto[]>([]);
   const [exchangeRates, setExchangeRates] = useState(defaultExchange);
   const [showProductos, setShowProductos] = useState(true);
+  const [isFleteModalOpen, setIsFleteModalOpen] = useState(false);
+  const [tipoFlete, setTipoFlete] = useState<TipoFlete>("nacional");
+  const [fleteInternacionalItems, setFleteInternacionalItems] = useState<FleteItem[]>(defaultFleteInternacionalItems);
+  const [fleteNacionalItems, setFleteNacionalItems] = useState<FleteItem[]>(defaultFleteNacionalItems);
 
   const [formData, setFormData] = useState({
     autor: "",
@@ -165,6 +212,7 @@ export default function CrearCotizacion() {
     proveedor: "",
     codigo: "",
     plazo: 0,
+    ctoFinanciero: 0,
   });
 
   const [selectedClientId, setSelectedClientId] = useState<string>("");
@@ -198,40 +246,104 @@ export default function CrearCotizacion() {
 
   const selectedClient = clientes.find((c) => c.id === selectedClientId) || null;
 
-  const subtotal = useMemo(() => {
-    return items.reduce((acc, item) => {
-      const from = item.moneda || formData.monedaEntrada;
-      const costoEnPdf = convertCurrency(
-        Number.isFinite(item.costoCompra) ? Number(item.costoCompra) : 0,
-        from,
-        formData.monedaPdf,
-        exchangeRates
-      );
-      const margenItem = Number.isFinite(item.margenItem) ? Number(item.margenItem) : formData.margen;
-      const precioVenta = costoEnPdf * (1 + margenItem / 100);
-      const cantidad = Number.isFinite(item.cantidad) ? Number(item.cantidad) : 0;
-      return acc + precioVenta * cantidad;
-    }, 0);
-  }, [items, formData.monedaPdf, formData.margen, exchangeRates]);
-
-  const calcFleteMonto = (item: Producto, baseSubtotal: number) => {
+  const getItemPricing = (item: Producto) => {
     const from = item.moneda || formData.monedaEntrada;
-    const costoEnPdf = convertCurrency(
+    const costoPdf = convertCurrency(
       Number.isFinite(item.costoCompra) ? Number(item.costoCompra) : 0,
       from,
       formData.monedaPdf,
       exchangeRates
     );
     const margenItem = Number.isFinite(item.margenItem) ? Number(item.margenItem) : formData.margen;
-    const precioVenta = costoEnPdf * (1 + margenItem / 100);
+    const ctoFinanciero = Number.isFinite(item.ctoFinanciero) ? Number(item.ctoFinanciero) : 0;
+    const totalPct = margenItem + ctoFinanciero;
     const cantidad = Number.isFinite(item.cantidad) ? Number(item.cantidad) : 0;
-    const netoItem = precioVenta * cantidad;
-    const defaultPct = subtotal > 0 ? (netoItem / subtotal) * 100 : 0;
-    const pct = Number.isFinite(item.fleteItem) ? Number(item.fleteItem) : defaultPct;
+    const netoBase = costoPdf * cantidad;
+    const ivaBase = netoBase * (formData.iva / 100);
+    const totalBase = netoBase + ivaBase;
+    const denom = 1 - totalPct / 100;
+    const netoVenta = denom <= 0 ? 0 : safeDivide(netoBase, denom);
+    const ivaVenta = netoVenta * (formData.iva / 100);
+    const brutoVenta = netoVenta + ivaVenta;
+    const brutoUnit = cantidad > 0 ? brutoVenta / cantidad : 0;
+    const precioVenta = cantidad > 0 ? netoVenta / cantidad : 0;
     return {
-      netoItem,
+      costoPdf,
+      margenItem,
+      ctoFinanciero,
+      totalPct,
+      precioVenta,
+      cantidad,
+      netoVenta,
+      ivaVenta,
+      brutoVenta,
+      brutoUnit,
+      netoBase,
+      ivaBase,
+      totalBase,
+    };
+  };
+
+  const subtotal = useMemo(() => {
+    return items.reduce((acc, item) => {
+      const { netoVenta } = getItemPricing(item);
+      return acc + netoVenta;
+    }, 0);
+  }, [items, formData.monedaPdf, formData.monedaEntrada, formData.margen, exchangeRates]);
+
+  const totalNetoBase = useMemo(() => {
+    return items.reduce((acc, item) => {
+      const { netoBase } = getItemPricing(item);
+      return acc + netoBase;
+    }, 0);
+  }, [items, formData.monedaPdf, formData.monedaEntrada, formData.margen, exchangeRates]);
+
+  const fleteInternacionalRows = useMemo(
+    () =>
+      fleteInternacionalItems.map((item) =>
+        item.descripcion === "Factura Proveedor"
+          ? { ...item, valorEstimado: Math.round(totalNetoBase) }
+          : item
+      ),
+    [fleteInternacionalItems, totalNetoBase]
+  );
+
+  const fleteInternacionalTotal = useMemo(
+    () =>
+      fleteInternacionalRows.reduce(
+        (acc, item) => acc + (Number.isFinite(item.valorEstimado) ? Number(item.valorEstimado) : 0),
+        0
+      ),
+    [fleteInternacionalRows]
+  );
+
+  const facturaProveedorValor =
+    fleteInternacionalRows.find((it) => it.descripcion === "Factura Proveedor")?.valorEstimado || 0;
+  const fleteFactorCalc = facturaProveedorValor > 0 ? fleteInternacionalTotal / facturaProveedorValor : 0;
+
+  const fleteNacionalTotal = useMemo(
+    () =>
+      fleteNacionalItems.reduce(
+        (acc, item) => acc + (Number.isFinite(item.valorEstimado) ? Number(item.valorEstimado) : 0),
+        0
+      ),
+    [fleteNacionalItems]
+  );
+
+  const calcFleteMonto = (item: Producto, baseSubtotal: number) => {
+    const { netoVenta, precioVenta, netoBase, totalPct } = getItemPricing(item);
+    const basePool = tipoFlete === "internacional" ? fleteInternacionalTotal - facturaProveedorValor : 0;
+    const defaultPct =
+      tipoFlete === "internacional" && totalNetoBase > 0 ? (netoBase / totalNetoBase) * 100 : 0;
+    const hasCustomFlete = Number.isFinite(item.fleteItem) && Number(item.fleteItem) !== 0;
+    const pct = hasCustomFlete ? Number(item.fleteItem) : defaultPct;
+    const denom = 1 - totalPct / 100;
+    const fleteMontoBase =
+      tipoFlete === "internacional" && basePool > 0 ? (basePool * (pct / 100)) / (denom || 1) : 0;
+    return {
+      netoItem: netoVenta,
       fletePct: pct,
-      fleteMonto: netoItem * (pct / 100),
+      fleteMonto: fleteMontoBase,
       precioUnit: precioVenta,
     };
   };
@@ -240,8 +352,9 @@ export default function CrearCotizacion() {
     const { fleteMonto } = calcFleteMonto(item, subtotal);
     return acc + fleteMonto;
   }, 0);
-  const ivaMonto = subtotal * (formData.iva / 100);
-  const total = subtotal + ivaMonto + fleteTotal;
+  const resumenSubtotal = totalNetoBase;
+  const resumenIva = resumenSubtotal * (formData.iva / 100);
+  const resumenTotal = resumenSubtotal + resumenIva + fleteTotal;
 
   const guardarProductoNuevo = () => {
     if (!nuevoProducto.nombre) {
@@ -267,6 +380,7 @@ export default function CrearCotizacion() {
       proveedor: "",
       codigo: "",
       plazo: 0,
+      ctoFinanciero: 0,
     });
     setIsProductoModal(false);
     toast.success("Producto creado");
@@ -279,7 +393,8 @@ export default function CrearCotizacion() {
         ...p,
         id: `item-${Date.now()}`,
         margenItem: Number.isFinite(p.margenItem) ? p.margenItem : formData.margen,
-        fleteItem: Number.isFinite(p.fleteItem) ? p.fleteItem : 0,
+        fleteItem: Number.isFinite(p.fleteItem) ? p.fleteItem : undefined,
+        ctoFinanciero: Number.isFinite(p.ctoFinanciero) ? p.ctoFinanciero : 0,
       },
     ]);
   };
@@ -290,6 +405,18 @@ export default function CrearCotizacion() {
 
   const eliminarItem = (id: string) => {
     setItems((prev) => prev.filter((i) => i.id !== id));
+  };
+
+  const actualizarFleteInternacional = (index: number, data: Partial<FleteItem>) => {
+    setFleteInternacionalItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, ...data } : item))
+    );
+  };
+
+  const actualizarFleteNacional = (index: number, data: Partial<FleteItem>) => {
+    setFleteNacionalItems((prev) =>
+      prev.map((item, idx) => (idx === index ? { ...item, ...data } : item))
+    );
   };
 
   const handleExcelChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -322,7 +449,14 @@ export default function CrearCotizacion() {
         codigo: row["codigo"] || row["Codigo"] || "",
         plazo: toNumber(row["plazo"] || row["Plazo"] || row["Plazo Días"] || 0),
         margenItem: formData.margen,
-        fleteItem: 0,
+        fleteItem: undefined,
+        ctoFinanciero: toNumber(
+          row["Cto Financiero"] ||
+            row["% Cto Financiero"] ||
+            row["cto_financiero"] ||
+            row["Cto financiero"] ||
+            0
+        ),
       };
     });
 
@@ -356,10 +490,10 @@ export default function CrearCotizacion() {
       estado: "borrador",
       cliente: selectedClient,
       items,
-      subtotal,
-      iva: ivaMonto,
+      subtotal: resumenSubtotal,
+      iva: resumenIva,
       flete: fleteTotal,
-      total,
+      total: resumenTotal,
       monedaEntrada: formData.monedaEntrada,
       monedaPdf: formData.monedaPdf,
       margen: formData.margen,
@@ -367,7 +501,7 @@ export default function CrearCotizacion() {
       incluirFlete: true,
       exchangeRates,
     };
-  }, [selectedClient, numeroCotizacion, formData, items, subtotal, ivaMonto, fleteTotal, total, exchangeRates]);
+  }, [selectedClient, numeroCotizacion, formData, items, resumenSubtotal, resumenIva, fleteTotal, resumenTotal, exchangeRates]);
 
   const guardarCotizacion = (estado: CotizacionGuardada["estado"], irLista = false) => {
     if (!cotizacionActual) {
@@ -498,6 +632,9 @@ export default function CrearCotizacion() {
           <h1 className="text-2xl font-semibold">Crear Cotizacion</h1>
         </div>
         <div className="space-x-2">
+          <Button variant="outline" onClick={() => setIsFleteModalOpen(true)}>
+            Flete
+          </Button>
           <Button variant="outline" onClick={() => setShowProductos((s) => !s)}>
             {showProductos ? <ChevronUp className="w-4 h-4 mr-1" /> : <ChevronDown className="w-4 h-4 mr-1" />}
             {showProductos ? "Ocultar productos" : "Ver productos"}
@@ -546,8 +683,13 @@ export default function CrearCotizacion() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <Card className="lg:col-span-2">
-          <CardHeader>
+          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Cliente</CardTitle>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" onClick={() => setIsFleteModalOpen(true)}>
+                Flete
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -634,16 +776,16 @@ export default function CrearCotizacion() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label>IVA (%)</Label>
-                  <Input
-                    type="number"
-                    value={formData.iva}
-                    onChange={(e) => setFormData({ ...formData, iva: toNumber(e.target.value) })}
-                  />
-                </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label>IVA (%)</Label>
+                <Input
+                  type="number"
+                  value={formData.iva}
+                  onChange={(e) => setFormData({ ...formData, iva: toNumber(e.target.value) })}
+                />
               </div>
+            </div>
             </div>
           </CardContent>
         </Card>
@@ -686,6 +828,9 @@ export default function CrearCotizacion() {
         <CardHeader className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
           <CardTitle>Productos</CardTitle>
           <div className="flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={() => setItems([...items])}>
+              Aplicar flete
+            </Button>
             <Input type="file" accept=".xlsx,.xls" onChange={handleExcelChange} className="max-w-xs" />
             <Button size="sm" onClick={() => setIsProductoModal(true)}>
               <Plus className="w-4 h-4 mr-1" /> Nuevo producto
@@ -721,12 +866,17 @@ export default function CrearCotizacion() {
                   <TableRow>
                     <TableHead>Producto</TableHead>
                     <TableHead>Cant</TableHead>
-                    <TableHead>Moneda entrada</TableHead>
-                    <TableHead>Moneda PDF</TableHead>
-                    <TableHead>Margen (%)</TableHead>
+                    <TableHead>Valor unitario</TableHead>
+                    <TableHead>Valor neto</TableHead>
+                    <TableHead>Valor IVA</TableHead>
+                    <TableHead>Valor total</TableHead>
+                    <TableHead>% Margen</TableHead>
+                    <TableHead>% Cto Financiero</TableHead>
+                    <TableHead>Valor Neto Rent</TableHead>
+                    <TableHead>Valor IVA Rent</TableHead>
+                    <TableHead>Valor Bruto</TableHead>
+                    <TableHead>Valor Bruto Unid</TableHead>
                     <TableHead>Flete %</TableHead>
-                    <TableHead>Precio unit (PDF)</TableHead>
-                    <TableHead>IVA</TableHead>
                     <TableHead>Flete</TableHead>
                     <TableHead>Total</TableHead>
                     <TableHead></TableHead>
@@ -734,31 +884,37 @@ export default function CrearCotizacion() {
                 </TableHeader>
                 <TableBody>
                   {items.map((item) => {
-                    const from = item.moneda || formData.monedaEntrada;
-                    const costoPdf = convertCurrency(
-                      Number.isFinite(item.costoCompra) ? Number(item.costoCompra) : 0,
-                      from,
-                      formData.monedaPdf,
-                      exchangeRates
-                    );
-                    const margenItem = Number.isFinite(item.margenItem) ? item.margenItem! : formData.margen;
-                    const precioVenta = costoPdf * (1 + margenItem / 100);
-                    const cantidad = Number.isFinite(item.cantidad) ? Number(item.cantidad) : 0;
-                    const netoItem = precioVenta * cantidad;
-                    const defaultPct = subtotal > 0 ? (netoItem / subtotal) * 100 : 0;
-                    const fletePct = Number.isFinite(item.fleteItem) ? Number(item.fleteItem) : defaultPct;
-                    const fleteMonto = netoItem * (fletePct / 100);
-                    const ivaItem = netoItem * (formData.iva / 100);
-                    const totalItem = netoItem + ivaItem + fleteMonto;
+                    const {
+                      margenItem,
+                      ctoFinanciero,
+                      netoVenta,
+                      ivaVenta,
+                      brutoVenta,
+                      brutoUnit,
+                      netoBase,
+                      ivaBase,
+                      totalBase,
+                    } = getItemPricing(item);
+                    const { fletePct, fleteMonto } = calcFleteMonto(item, subtotal);
+                    const displayFletePct = Number.isFinite(fletePct) ? Math.round(fletePct) : 0;
+                    const totalItem = netoVenta + ivaVenta + fleteMonto;
                     return (
                       <TableRow key={item.id}>
                         <TableCell className="max-w-[200px] whitespace-normal break-words">
                           <div className="font-medium break-words">{item.nombre}</div>
                           <div className="text-xs text-slate-500 break-words">{item.descripcion}</div>
                         </TableCell>
-                        <TableCell className="text-right">{item.cantidad}</TableCell>
-                        <TableCell>{(item.moneda || formData.monedaEntrada).toUpperCase()}</TableCell>
-                        <TableCell>{formData.monedaPdf.toUpperCase()}</TableCell>
+                        <TableCell className="max-w-[90px]">
+                          <Input
+                            type="number"
+                            value={item.cantidad}
+                            onChange={(e) => actualizarItem(item.id, { cantidad: toNumber(e.target.value) })}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">{formatPrice(netoBase / (item.cantidad || 1 || 1))}</TableCell>
+                        <TableCell className="text-right">{formatPrice(netoBase)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(ivaBase)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(totalBase)}</TableCell>
                         <TableCell className="max-w-[90px]">
                           <Input
                             type="number"
@@ -771,14 +927,25 @@ export default function CrearCotizacion() {
                         <TableCell className="max-w-[110px]">
                           <Input
                             type="number"
-                            value={fletePct}
+                            value={Number.isFinite(item.ctoFinanciero) ? item.ctoFinanciero : 0}
+                            onChange={(e) =>
+                              actualizarItem(item.id, { ctoFinanciero: toNumber(e.target.value) })
+                            }
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">{formatPrice(netoVenta)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(ivaVenta)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(brutoVenta)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(brutoUnit)}</TableCell>
+                        <TableCell className="max-w-[110px]">
+                          <Input
+                            type="number"
+                            value={displayFletePct}
                             onChange={(e) =>
                               actualizarItem(item.id, { fleteItem: toNumber(e.target.value) })
                             }
                           />
                         </TableCell>
-                        <TableCell className="text-right">{formatPrice(precioVenta)}</TableCell>
-                        <TableCell className="text-right">{formatPrice(ivaItem)}</TableCell>
                         <TableCell className="text-right">{formatPrice(fleteMonto)}</TableCell>
                         <TableCell className="text-right font-semibold">{formatPrice(totalItem)}</TableCell>
                         <TableCell>
@@ -825,11 +992,11 @@ export default function CrearCotizacion() {
             </div>
             <div className="flex justify-between text-sm">
               <span>Neto</span>
-              <span>{formatPrice(subtotal)}</span>
+              <span>{formatPrice(resumenSubtotal)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span>IVA ({formData.iva}%)</span>
-              <span>{formatPrice(ivaMonto)}</span>
+              <span>{formatPrice(resumenIva)}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span>Flete</span>
@@ -837,7 +1004,7 @@ export default function CrearCotizacion() {
             </div>
             <div className="flex justify-between text-base font-semibold border-t pt-2">
               <span>Total</span>
-              <span>{formatPrice(total)}</span>
+              <span>{formatPrice(resumenTotal)}</span>
             </div>
             <div className="pt-2 space-y-2">
               <Button className="w-full" onClick={() => guardarCotizacion("borrador")}>Guardar</Button>
@@ -855,10 +1022,188 @@ export default function CrearCotizacion() {
         </Card>
       </div>
 
+      <Dialog open={isFleteModalOpen} onOpenChange={setIsFleteModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Flete</DialogTitle>
+            <DialogDescription className="sr-only">
+              Configura costos de flete nacional o internacional.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+            <div className="flex items-center gap-3">
+              <Label className="whitespace-nowrap">Tipo de flete</Label>
+              <Select value={tipoFlete} onValueChange={(v) => setTipoFlete(v as TipoFlete)}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Selecciona" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="nacional">Nacional</SelectItem>
+                  <SelectItem value="internacional">Internacional</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-slate-500">
+              Usa nacional o internacional. En internacional se aplica el reparto automático de flete contra neto.
+            </p>
+          </div>
+
+            {tipoFlete === "internacional" ? (
+              <>
+                <div className="overflow-x-auto max-h-[60vh]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead>Nombre Proveedor</TableHead>
+                        <TableHead>Rut Proveedor</TableHead>
+                        <TableHead>Moneda</TableHead>
+                        <TableHead className="text-right">Valor Estimado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fleteInternacionalRows.map((item, idx) => (
+                        <TableRow key={`${item.descripcion}-${idx}`}>
+                          <TableCell className="font-medium">{item.descripcion}</TableCell>
+                          <TableCell>
+                            <Input
+                              placeholder="Proveedor"
+                              value={item.proveedor}
+                              onChange={(e) => actualizarFleteInternacional(idx, { proveedor: e.target.value })}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              placeholder="RUT"
+                              value={item.rut}
+                              onChange={(e) => actualizarFleteInternacional(idx, { rut: e.target.value })}
+                            />
+                          </TableCell>
+                          <TableCell className="min-w-[120px]">
+                            <Select
+                              value={item.moneda}
+                              onValueChange={(v) => actualizarFleteInternacional(idx, { moneda: v as Moneda })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="clp">CLP</SelectItem>
+                                <SelectItem value="usd">USD</SelectItem>
+                                <SelectItem value="eur">EUR</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="min-w-[140px]">
+                            {item.descripcion === "Factura Proveedor" ? (
+                              <Input type="number" value={Math.round(totalNetoBase)} readOnly className="bg-slate-100" />
+                            ) : (
+                              <Input
+                                type="number"
+                                value={item.valorEstimado}
+                                onChange={(e) =>
+                                  actualizarFleteInternacional(idx, { valorEstimado: toNumber(e.target.value) })
+                                }
+                              />
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <div className="text-sm">
+                    <span className="font-semibold mr-2">Costo total bodega:</span>
+                    <span>{fleteInternacionalTotal.toLocaleString("es-CL")}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">Factor</span>
+                    <Input className="w-24 bg-slate-100" type="number" step="0.01" value={fleteFactorCalc.toFixed(2)} readOnly />
+                  </div>
+                  <div className="text-xs text-slate-500 text-right">
+                    Factor = total flete / factura proveedor. La factura se fija al total neto.
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Descripción</TableHead>
+                        <TableHead>Nombre Proveedor</TableHead>
+                        <TableHead>Rut Proveedor</TableHead>
+                        <TableHead>Moneda</TableHead>
+                        <TableHead className="text-right">Valor Estimado</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fleteNacionalItems.map((item, idx) => (
+                        <TableRow key={`${item.descripcion}-${idx}`}>
+                          <TableCell className="font-medium">{item.descripcion}</TableCell>
+                          <TableCell>
+                            <Input
+                              placeholder="Proveedor"
+                              value={item.proveedor}
+                              onChange={(e) => actualizarFleteNacional(idx, { proveedor: e.target.value })}
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <Input
+                              placeholder="RUT"
+                              value={item.rut}
+                              onChange={(e) => actualizarFleteNacional(idx, { rut: e.target.value })}
+                            />
+                          </TableCell>
+                          <TableCell className="min-w-[120px]">
+                            <Select
+                              value={item.moneda}
+                              onValueChange={(v) => actualizarFleteNacional(idx, { moneda: v as Moneda })}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="clp">CLP</SelectItem>
+                                <SelectItem value="usd">USD</SelectItem>
+                                <SelectItem value="eur">EUR</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </TableCell>
+                          <TableCell className="min-w-[140px]">
+                            <Input
+                              type="number"
+                              value={item.valorEstimado}
+                              onChange={(e) =>
+                                actualizarFleteNacional(idx, { valorEstimado: toNumber(e.target.value) })
+                              }
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex justify-end text-sm">
+                  <span className="font-semibold mr-2">Costo total bodega:</span>
+                  <span>{fleteNacionalTotal.toLocaleString("es-CL")}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isProductoModal} onOpenChange={setIsProductoModal}>
         <DialogContent className="max-w-3xl">
           <DialogHeader>
             <DialogTitle>Nuevo producto</DialogTitle>
+            <DialogDescription className="sr-only">
+              Completa los datos del producto para agregarlo a la lista.
+            </DialogDescription>
           </DialogHeader>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <Input
@@ -888,7 +1233,7 @@ export default function CrearCotizacion() {
               value={nuevoProducto.descripcion}
               onChange={(e) => setNuevoProducto({ ...nuevoProducto, descripcion: e.target.value })}
             />
-            <div className="grid grid-cols-3 gap-2 md:col-span-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:col-span-2">
               <div>
                 <Label>Costo</Label>
                 <Input
@@ -903,6 +1248,16 @@ export default function CrearCotizacion() {
                   type="number"
                   value={nuevoProducto.cantidad}
                   onChange={(e) => setNuevoProducto({ ...nuevoProducto, cantidad: toNumber(e.target.value) })}
+                />
+              </div>
+              <div>
+                <Label>% Cto Financiero</Label>
+                <Input
+                  type="number"
+                  value={nuevoProducto.ctoFinanciero}
+                  onChange={(e) =>
+                    setNuevoProducto({ ...nuevoProducto, ctoFinanciero: toNumber(e.target.value) })
+                  }
                 />
               </div>
               <div>
@@ -931,6 +1286,9 @@ export default function CrearCotizacion() {
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Vista previa</DialogTitle>
+            <DialogDescription className="sr-only">
+              Previsualiza la cotizacion antes de descargar o enviar.
+            </DialogDescription>
           </DialogHeader>
           {cotizacionActual ? (
             <div className="space-y-3">
@@ -950,45 +1308,53 @@ export default function CrearCotizacion() {
                   <TableRow>
                     <TableHead>Producto</TableHead>
                     <TableHead>Cant</TableHead>
-                    <TableHead>Moneda entrada</TableHead>
-                    <TableHead>Moneda PDF</TableHead>
-                    <TableHead>Margen (%)</TableHead>
+                    <TableHead>Valor unitario</TableHead>
+                    <TableHead>Valor neto</TableHead>
+                    <TableHead>Valor IVA</TableHead>
+                    <TableHead>Valor total</TableHead>
+                    <TableHead>% Margen</TableHead>
+                    <TableHead>% Cto Financiero</TableHead>
+                    <TableHead>Valor Neto Rent</TableHead>
+                    <TableHead>Valor IVA Rent</TableHead>
+                    <TableHead>Valor Bruto</TableHead>
+                    <TableHead>Valor Bruto Unid</TableHead>
                     <TableHead>Flete %</TableHead>
-                    <TableHead>IVA</TableHead>
                     <TableHead>Flete</TableHead>
-                    <TableHead>Precio</TableHead>
                     <TableHead>Total</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {cotizacionActual.items.map((item) => {
-                    const from = item.moneda || formData.monedaEntrada;
-                    const costoPdf = convertCurrency(
-                      Number.isFinite(item.costoCompra) ? Number(item.costoCompra) : 0,
-                      from,
-                      formData.monedaPdf,
-                      exchangeRates
-                    );
-                    const margenItem = Number.isFinite(item.margenItem) ? item.margenItem! : formData.margen;
-                    const precioVenta = costoPdf * (1 + margenItem / 100);
-                    const cantidad = Number.isFinite(item.cantidad) ? Number(item.cantidad) : 0;
-                    const netoItem = precioVenta * cantidad;
-                    const defaultPct = subtotal > 0 ? (netoItem / subtotal) * 100 : 0;
-                    const fletePct = Number.isFinite(item.fleteItem) ? Number(item.fleteItem) : defaultPct;
-                    const fleteMonto = netoItem * (fletePct / 100);
-                    const ivaItem = netoItem * (formData.iva / 100);
-                    const totalItem = netoItem + ivaItem + fleteMonto;
+                    const {
+                      margenItem,
+                      ctoFinanciero,
+                      netoVenta,
+                      ivaVenta,
+                      brutoVenta,
+                      brutoUnit,
+                      netoBase,
+                      ivaBase,
+                      totalBase,
+                    } = getItemPricing(item);
+                    const { fletePct, fleteMonto } = calcFleteMonto(item, subtotal);
+                    const displayFletePct = Number.isFinite(fletePct) ? Math.round(fletePct) : 0;
+                    const totalItem = netoVenta + ivaVenta + fleteMonto;
                     return (
                       <TableRow key={item.id}>
                         <TableCell className="max-w-[200px] whitespace-normal break-words">{item.nombre}</TableCell>
                         <TableCell className="text-right">{item.cantidad}</TableCell>
-                        <TableCell>{(item.moneda || formData.monedaEntrada).toUpperCase()}</TableCell>
-                        <TableCell>{formData.monedaPdf.toUpperCase()}</TableCell>
-                        <TableCell>{Number.isFinite(item.margenItem) ? item.margenItem : formData.margen}%</TableCell>
-                        <TableCell>{fletePct}%</TableCell>
-                        <TableCell className="text-right">{formatPrice(ivaItem)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(netoBase / (item.cantidad || 1 || 1))}</TableCell>
+                        <TableCell className="text-right">{formatPrice(netoBase)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(ivaBase)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(totalBase)}</TableCell>
+                        <TableCell>{Number.isFinite(margenItem) ? margenItem : formData.margen}%</TableCell>
+                        <TableCell>{Number.isFinite(ctoFinanciero) ? ctoFinanciero : 0}%</TableCell>
+                        <TableCell className="text-right">{formatPrice(netoVenta)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(ivaVenta)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(brutoVenta)}</TableCell>
+                        <TableCell className="text-right">{formatPrice(brutoUnit)}</TableCell>
+                        <TableCell>{displayFletePct}%</TableCell>
                         <TableCell className="text-right">{formatPrice(fleteMonto)}</TableCell>
-                        <TableCell className="text-right">{formatPrice(precioVenta)}</TableCell>
                         <TableCell className="text-right font-semibold">{formatPrice(totalItem)}</TableCell>
                       </TableRow>
                     );
@@ -996,23 +1362,23 @@ export default function CrearCotizacion() {
                 </TableBody>
               </Table>
 
-            <div className="flex flex-col items-end space-y-1">
-              <div className="flex justify-between w-64 text-sm">
-                <span>Neto</span>
-                <span>{formatPrice(subtotal)}</span>
-              </div>
-              <div className="flex justify-between w-64 text-sm">
-                <span>IVA ({formData.iva}%)</span>
-                <span>{formatPrice(ivaMonto)}</span>
-              </div>
-              <div className="flex justify-between w-64 text-sm">
-                <span>Flete</span>
-                <span>{formatPrice(fleteTotal)}</span>
-              </div>
-              <div className="flex justify-between w-64 text-base font-semibold">
-                <span>Total</span>
-                <span>{formatPrice(total)}</span>
-              </div>
+              <div className="flex flex-col items-end space-y-1">
+                <div className="flex justify-between w-64 text-sm">
+                  <span>Neto</span>
+                  <span>{formatPrice(resumenSubtotal)}</span>
+                </div>
+                <div className="flex justify-between w-64 text-sm">
+                  <span>IVA ({formData.iva}%)</span>
+                  <span>{formatPrice(resumenIva)}</span>
+                </div>
+                <div className="flex justify-between w-64 text-sm">
+                  <span>Flete</span>
+                  <span>{formatPrice(fleteTotal)}</span>
+                </div>
+                <div className="flex justify-between w-64 text-base font-semibold">
+                  <span>Total</span>
+                  <span>{formatPrice(resumenTotal)}</span>
+                </div>
               </div>
 
               <CotizacionActions cotizacion={{
