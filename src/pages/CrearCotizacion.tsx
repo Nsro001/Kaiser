@@ -101,6 +101,13 @@ interface CotizacionGuardada {
   margen: number;
   ivaPorcentaje: number;
   exchangeRates: typeof defaultExchange;
+  fleteInternacionalItems?: FleteItem[];
+  fleteNacionalItems?: FleteItem[];
+  resumenNacionalTotales?: {
+    neto: number;
+    iva: number;
+    total: number;
+  };
 }
 
 const defaultFleteInternacionalItems: FleteItem[] = [
@@ -602,6 +609,9 @@ export default function CrearCotizacion() {
       ivaPorcentaje: formData.iva,
       incluirFlete: true,
       exchangeRates,
+      fleteInternacionalItems,
+      fleteNacionalItems,
+      resumenNacionalTotales,
     };
   }, [selectedClient, numeroCotizacion, formData, items, subtotal, resumenSubtotal, resumenIva, fleteTotal, resumenTotal, exchangeRates]);
 

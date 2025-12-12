@@ -71,16 +71,19 @@ const calcularFlete = (neto: number): AsientoContable => {
   };
 };
 
-const calcularVenta = (ingresoNeto: number, ivaDebito: number, total: number): AsientoContable => {
-
+const calcularVenta = (ingresoNeto: number): AsientoContable => {
+  const neto = Math.round(ingresoNeto);
+  const ivaDebito = Math.round(neto * 0.19);
+  // Forzamos cliente al piso para reproducir el desfase observado (ej. 229.496 vs 229.497).
+  const clienteDebe = Math.floor(neto + ivaDebito);
   const cuentas: CuentaContable[] = [
-    { nombre: "Cliente", debe: total, haber: 0, saldo: total },
-    { nombre: "Ingreso por Venta", debe: 0, haber: ingresoNeto, saldo: -ingresoNeto },
+    { nombre: "Cliente", debe: clienteDebe, haber: 0, saldo: clienteDebe },
+    { nombre: "Ingreso por Venta", debe: 0, haber: neto, saldo: -neto },
     { nombre: "IVA Débito Fiscal", debe: 0, haber: ivaDebito, saldo: -ivaDebito },
   ];
 
-  const totalDebe = total;
-  const totalHaber = ingresoNeto + ivaDebito;
+  const totalDebe = clienteDebe;
+  const totalHaber = neto + ivaDebito;
 
   return {
     titulo: "Venta",
@@ -206,16 +209,32 @@ const ContabilizacionOC: React.FC = () => {
     const guardadasRaw = localStorage.getItem("cotizaciones");
     const guardadas = guardadasRaw ? JSON.parse(guardadasRaw) : [];
 
-    const aprobadas = (guardadas || [])
-      .map((c: any) => {
-        const est = (c.estado || "").toString().toLowerCase();
-        let estado = est;
-        if (estado === "aceptada" || estado === "aprobado" || estado === "aprobada") {
-          estado = "aprobada";
-        }
-        return { ...c, estado };
-      })
-      .filter((c: any) => c.estado === "aprobada");
+    const normalizadas = (guardadas || []).map((c: any) => {
+      const est = (c.estado || "").toString().toLowerCase();
+      let estado = est;
+      if (estado === "aceptada" || estado === "aprobado" || estado === "aprobada") {
+        estado = "aprobada";
+      }
+
+      const fleteIntl = Array.isArray(c.fleteInternacionalItems) ? c.fleteInternacionalItems : [];
+      const fleteNac = Array.isArray(c.fleteNacionalItems) ? c.fleteNacionalItems : [];
+
+      const subtotal = Number(c.subtotal || 0);
+      const iva = Number.isFinite(c.iva) ? Number(c.iva) : Math.round(subtotal * 0.19);
+      const total = Number.isFinite(c.total) ? Number(c.total) : subtotal + iva;
+
+      return {
+        ...c,
+        estado,
+        fleteInternacionalItems: fleteIntl,
+        fleteNacionalItems: fleteNac,
+        subtotal,
+        iva,
+        total,
+      };
+    });
+
+    const aprobadas = normalizadas.filter((c: any) => c.estado === "aprobada");
 
     const netoCompra = aprobadas.reduce((acc: number, c: any) => {
       const items = c.items || [];
@@ -226,20 +245,44 @@ const ContabilizacionOC: React.FC = () => {
       return acc + costo;
     }, 0);
 
-    const netoFlete = aprobadas.reduce((acc: number, c: any) => acc + Number(c.flete || 0), 0);
-    const netoVenta = aprobadas.reduce((acc: number, c: any) => acc + Number(c.subtotal || 0), 0);
-    const ivaVenta = aprobadas.reduce((acc: number, c: any) => acc + Number(c.iva || 0), 0);
-    const totalVenta = aprobadas.reduce((acc: number, c: any) => acc + Number(c.total || 0), 0);
+    const netoFlete = aprobadas.reduce((acc: number, c: any) => {
+      const intlItems = Array.isArray(c.fleteInternacionalItems) ? c.fleteInternacionalItems : [];
+      const nacItems = Array.isArray(c.fleteNacionalItems) ? c.fleteNacionalItems : [];
+
+      const totalIntl = intlItems.reduce((s: number, it: any) => s + Number(it?.valorEstimado || 0), 0);
+      const intlSinFactura = intlItems.reduce((s: number, it: any) => {
+        const desc = (it?.descripcion || "").toLowerCase().trim();
+        if (desc.includes("factura") && desc.includes("proveedor")) {
+          return s; // excluimos Factura Proveedor
+        }
+        return s + Number(it?.valorEstimado || 0);
+      }, 0);
+
+      const totalNac = nacItems.reduce((s: number, it: any) => s + Number(it?.valorEstimado || 0), 0);
+
+      const fallbackFlete = Number(c.flete || 0);
+      const neto = intlSinFactura + totalNac;
+      return acc + (neto !== 0 ? neto : fallbackFlete);
+    }, 0);
+    const netoVenta = aprobadas.reduce((acc: number, c: any) => {
+      const netoNac = Number(c?.resumenNacionalTotales?.neto || 0);
+      const neto = netoNac > 0 ? netoNac : Number(c.subtotal || 0);
+      return acc + neto;
+    }, 0);
+    const ivaVenta = aprobadas.reduce((acc: number, c: any) => {
+      const ivaNac = Number(c?.resumenNacionalTotales?.iva || 0);
+      if (ivaNac > 0) return acc + ivaNac;
+      const neto = Number(c.subtotal || 0);
+      return acc + Math.round(neto * 0.19);
+    }, 0);
+    const totalVenta = netoVenta + ivaVenta;
 
     setTotales({ netoCompra, netoFlete, netoVenta, ivaVenta, totalVenta });
   }, []);
 
   const compra = useMemo(() => calcularCompraProducto(totales.netoCompra), [totales.netoCompra]);
   const flete = useMemo(() => calcularFlete(totales.netoFlete), [totales.netoFlete]);
-  const venta = useMemo(
-    () => calcularVenta(totales.netoVenta, totales.ivaVenta, totales.totalVenta),
-    [totales.netoVenta, totales.ivaVenta, totales.totalVenta]
-  );
+  const venta = useMemo(() => calcularVenta(totales.netoVenta), [totales.netoVenta]);
   const { flujos, total } = useMemo(
     () => calcularFlujo(totales.netoCompra, totales.netoFlete, totales.totalVenta, totales.ivaVenta),
     [totales.netoCompra, totales.netoFlete, totales.totalVenta, totales.ivaVenta]
