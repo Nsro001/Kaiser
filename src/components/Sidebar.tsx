@@ -16,11 +16,12 @@ import { Link, useLocation } from 'react-router-dom';
 const menuItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: FileText, label: 'Cotizaciones', path: '/cotizaciones' },
-  { icon: ShoppingCart, label: 'Órdenes de Compras', path: '/ordenes-compras' },
-  { icon: Briefcase, label: 'Órdenes de Trabajos', path: '/ordenes-trabajos' },
+  { icon: ShoppingCart, label: 'Órdenes de Compra', path: '/ordenes-compra' },
+  { icon: Briefcase, label: 'Órdenes de Trabajo', path: '/ordenes-trabajo' },
   { icon: Users, label: 'Clientes', path: '/clientes' },
   { icon: Package, label: 'Servicios/Productos', path: '/servicios-productos' },
   { icon: StickyNote, label: 'Estado de Resultados', path: '/estado-resultados' },
+  { icon: StickyNote, label: 'Contabilización OC', path: '/contabilizacion-oc' },
   { icon: UserCheck, label: 'Proveedores', path: '/proveedores' },
   { icon: StickyNote, label: 'Notas', path: '/notas' },
 ];

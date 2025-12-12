@@ -336,6 +336,8 @@ export default function CrearCotizacion() {
     [fleteNacionalItems]
   );
 
+  const fleteTotalPools = Math.max(fleteCostPool || 0, 0) + Math.max(fleteNacionalTotal || 0, 0);
+
   useEffect(() => {
     if (tipoFlete !== "internacional" && fleteInternacionalTotal > 0) {
       setTipoFlete("internacional");
@@ -420,6 +422,7 @@ export default function CrearCotizacion() {
       { neto: 0, iva: 0, total: 0 }
     );
   }, [resumenNacionalItems]);
+  const resumenNacionalTotalGeneral = resumenNacionalTotales.neto + resumenNacionalTotales.iva;
 
   const resumenProductosTotales = useMemo(() => {
     return items.reduce(
@@ -650,6 +653,32 @@ export default function CrearCotizacion() {
     pdf?.download("cotizacion.pdf");
   };
 
+  const verPDFNacional = async () => {
+    if (!cotizacionActual) {
+      toast.error("Falta cliente o productos");
+      return;
+    }
+    const pdf = await generateCotizacionPDF({
+      cliente: cotizacionActual.cliente?.nombre,
+      rut: cotizacionActual.cliente?.rut,
+      direccion: cotizacionActual.cliente?.direccion,
+      email: cotizacionActual.cliente?.email,
+      telefono: cotizacionActual.cliente?.telefono,
+      productos: cotizacionActual.items,
+      margen: formData.margen,
+      flete: fleteTotal,
+      incluirFlete: true,
+      numeroCotizacion,
+      fecha: formData.fechaEmision,
+      monedaPdf: formData.monedaPdf,
+      exchangeRates,
+      resumenNacional: resumenNacionalItems,
+      resumenNacionalTotales,
+      soloNacional: true,
+    });
+    pdf?.download("cotizacion_nacional.pdf");
+  };
+
   const enviarEmailConPDF = async (numeroOverride?: string) => {
     if (!cotizacionActual || !cotizacionActual.cliente?.email) {
       toast.error("Falta correo del cliente para enviar");
@@ -729,7 +758,7 @@ export default function CrearCotizacion() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Link to="/" className="text-sm text-blue-600 hover:underline">
+          <Link to="/" className="text-lg text-blue-600 hover:underline">
             ← Volver al Dashboard
           </Link>
           <h1 className="text-2xl font-semibold">Crear Cotizacion</h1>
@@ -1136,6 +1165,9 @@ export default function CrearCotizacion() {
               <Button className="w-full" variant="secondary" onClick={verPDF} disabled={!cotizacionActual}>
                 Descargar PDF
               </Button>
+              <Button className="w-full" variant="secondary" onClick={verPDFNacional} disabled={!cotizacionActual}>
+                PDF Nacional
+              </Button>
               <Button className="w-full" variant="secondary" onClick={handleGuardarYEnviar} disabled={!cotizacionActual}>
                 Guardar y enviar email
               </Button>
@@ -1193,11 +1225,68 @@ export default function CrearCotizacion() {
                 <TableCell className="text-right">{formatPrice(resumenNacionalTotales.iva)}</TableCell>
                 <TableCell className="text-right">{formatPrice(resumenNacionalTotales.total)}</TableCell>
               </TableRow>
-              
+
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Notas y observaciones (Nacional)</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <Textarea
+              placeholder="Introduccion o notas para el cliente nacional"
+              rows={4}
+              value={formData.referencia}
+              onChange={(e) => setFormData({ ...formData, referencia: e.target.value })}
+            />
+            <Textarea placeholder="Nota interna nacional" rows={3} />
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Resumen Nacional</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Moneda PDF</span>
+              <span className="font-medium">{formData.monedaPdf.toUpperCase()}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Neto</span>
+              <span>{formatPrice(resumenNacionalTotales.neto)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>IVA ({formData.iva}%)</span>
+              <span>{formatPrice(resumenNacionalTotales.iva)}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span>Flete (int + nac)</span>
+              <span>{formatPrice(fleteTotalPools)}</span>
+            </div>
+            <div className="flex justify-between text-base font-semibold border-t pt-2">
+              <span>Total</span>
+              <span>{formatPrice(resumenNacionalTotalGeneral)}</span>
+            </div>
+            <div className="pt-2 space-y-2">
+              <Button className="w-full" onClick={() => guardarCotizacion("borrador")}>Guardar</Button>
+              <Button className="w-full" variant="secondary" onClick={verPDF} disabled={!cotizacionActual}>
+                Descargar PDF
+              </Button>
+              <Button className="w-full" variant="secondary" onClick={handleGuardarYEnviar} disabled={!cotizacionActual}>
+                Guardar y enviar email
+              </Button>
+              <Button className="w-full" variant="outline" onClick={() => guardarCotizacion("enviada", true)} disabled={!cotizacionActual}>
+                Guardar y salir
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       <Dialog open={isFleteModalOpen} onOpenChange={setIsFleteModalOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">

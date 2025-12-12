@@ -41,13 +41,16 @@ export default function ServiciosProductos() {
           body: JSON.stringify({ archivo: base64File }),
         });
 
-        const data = await resp.json();
+        if (!resp.ok) {
+          throw new Error(`Error ${resp.status} al cargar Excel`);
+        }
 
-        if (data.ok) {
+        const data = await resp.json().catch(() => ({})); // protege ante cuerpos vacíos
+
+        if (data && (data.ok || resp.ok)) {
           toast.success("Excel cargado correctamente 🎉");
         } else {
-          toast.error("Error al cargar Excel");
-          console.error(data);
+          throw new Error("Error al cargar Excel");
         }
       };
 

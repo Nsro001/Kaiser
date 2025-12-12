@@ -14,6 +14,7 @@ import OrdenesTrabajo from "./pages/OrdenesTrabajo";
 import OrdenDetalle from "./pages/OrdenDetalle";
 import EstadoResultados from './pages/EstadoResultados';
 import FacturacionSII from "./pages/FacturacionSII";
+import ContabilizacionOC from "./pages/ContabilizacionOC";
 
 
 const queryClient = new QueryClient();
@@ -27,6 +28,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/cotizaciones" element={<Cotizaciones />} />
           <Route path="/crear-cotizacion" element={<CrearCotizacion />} />
+          <Route path="/contabilizacion-oc" element={<ContabilizacionOC />} />
           <Route path="/clientes" element={<Clientes />} />
           <Route path="/servicios-productos" element={<ServiciosProductos />} />
           <Route path="/proveedores" element={<Proveedores />} />

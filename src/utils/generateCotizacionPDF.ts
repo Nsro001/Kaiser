@@ -35,6 +35,7 @@ export const generateCotizacionPDF = async (data: any) => {
     exchangeRates = { clp: 1, usd: 900, eur: 1000 },
     resumenNacional = [],
     resumenNacionalTotales = null,
+    soloNacional = false,
   } = data;
 
   const fleteMonto = incluirFlete ? Number(flete) || 0 : 0;
@@ -47,26 +48,31 @@ export const generateCotizacionPDF = async (data: any) => {
   let subtotal = 0;
   const items: any[] = [];
 
-  productos.forEach((p: any, index: number) => {
-    const costo = Number(p.costoCompra);
-    const entradaRate = exchangeRates[p.moneda || "clp"] || 1;
-    const pdfRate = exchangeRates[monedaPdf] || 1;
-    const costoEnPDF = (costo * entradaRate) / pdfRate;
-    const margenItem = Number.isFinite(p.margenItem) ? Number(p.margenItem) : margen;
-    const precio = costoEnPDF * (1 + margenItem / 100);
-    const total = precio * p.cantidad;
-    subtotal += total;
+  if (!soloNacional) {
+    productos.forEach((p: any, index: number) => {
+      const costo = Number(p.costoCompra);
+      const entradaRate = exchangeRates[p.moneda || "clp"] || 1;
+      const pdfRate = exchangeRates[monedaPdf] || 1;
+      const costoEnPDF = (costo * entradaRate) / pdfRate;
+      const margenItem = Number.isFinite(p.margenItem) ? Number(p.margenItem) : margen;
+      const ctoFin = Number.isFinite(p.ctoFinanciero) ? Number(p.ctoFinanciero) : 0;
+      const totalPct = margenItem + ctoFin;
+      const denom = 1 - totalPct / 100;
+      const precio = denom <= 0 ? costoEnPDF : costoEnPDF / denom;
+      const total = precio * p.cantidad;
+      subtotal += total;
 
-    items.push([
-      index + 1,
-      p.codigo || "",
-      p.nombre || "",
-      p.descripcion || "",
-      p.cantidad,
-      `$ ${Math.round(precio).toLocaleString("es-CL")}`,
-      `$ ${Math.round(total).toLocaleString("es-CL")}`,
-    ]);
-  });
+      items.push([
+        index + 1,
+        p.codigo || "",
+        p.nombre || "",
+        p.descripcion || "",
+        p.cantidad,
+        `$ ${Math.round(precio).toLocaleString("es-CL")}`,
+        `$ ${Math.round(total).toLocaleString("es-CL")}`,
+      ]);
+    });
+  }
 
   const subtotalRounded = Math.round(subtotal);
   const ivaRounded = Math.round(subtotal * 0.19);
@@ -77,15 +83,16 @@ export const generateCotizacionPDF = async (data: any) => {
     Array.isArray(resumenNacional) && resumenNacional.length > 0
       ? {
           margin: [0, 20, 0, 0],
+          fontSize: 9,
           table: {
             headerRows: 1,
-            widths: [30, "*", "*", 50, 40, 50, 60, 60, 60, 60],
+            widths: [25, "*", "*", 45, 35, 45, 55, 55, 55, 55],
             body: [
               [
                 { text: "#", bold: true },
                 { text: "Producto", bold: true },
                 { text: "Proveedor", bold: true },
-                { text: "Días", bold: true },
+                { text: "Dias", bold: true },
                 { text: "Cant", bold: true },
                 { text: "Moneda", bold: true },
                 { text: "Valor unitario", bold: true },
@@ -114,8 +121,118 @@ export const generateCotizacionPDF = async (data: any) => {
         }
       : null;
 
+  const content: any[] = [];
+
+  content.push({
+    margin: [0, 0, 0, 15],
+    table: {
+      widths: ["50%", "50%"],
+      body: [
+        [
+          {
+            stack: [
+              { text: `Nombre Empresa : ${cliente || ""}`, fontSize: 10 },
+              { text: `RUT : ${rut || ""}`, fontSize: 10 },
+              { text: `Correo : ${email || ""}`, fontSize: 10 },
+            ],
+          },
+          {
+            stack: [
+              { text: `Direccion : ${direccion || ""}`, fontSize: 10 },
+              { text: `Telefono : ${telefono || ""}`, fontSize: 10 },
+            ],
+          },
+        ],
+      ],
+    },
+  });
+
+  if (!soloNacional) {
+    content.push({ text: "Introduccion predeterminada", margin: [0, 0, 0, 10] });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: [20, 50, "*", "*", 50, 70, 70],
+        body: [
+          [
+            { text: "#", bold: true },
+            { text: "Codigo", bold: true },
+            { text: "Servicio / Producto", bold: true },
+            { text: "Descripcion", bold: true },
+            { text: "Cantidad", bold: true },
+            { text: "Valor", bold: true },
+            { text: "Total", bold: true },
+          ],
+          ...items,
+        ],
+      },
+      layout: {
+        fillColor: (rowIndex: number) => (rowIndex === 0 ? "#f0f0f0" : null),
+      },
+    });
+
+    content.push({
+      margin: [0, 20, 0, 10],
+      alignment: "right",
+      table: {
+        widths: ["*", 120],
+        body: [
+          ["Moneda :", "Peso Chileno"],
+          ["Neto :", `$ ${subtotalRounded.toLocaleString("es-CL")}`],
+          ["IVA (19%) :", `$ ${ivaRounded.toLocaleString("es-CL")}`],
+          ["Flete :", `$ ${fleteRounded.toLocaleString("es-CL")}`],
+          [
+            { text: "Total :", bold: true },
+            { text: `$ ${totalGeneralRounded.toLocaleString("es-CL")}`, bold: true },
+          ],
+        ],
+      },
+    });
+  }
+
+  if (resumenNacionalTable) {
+    content.push({
+      text: "Resumen Cliente Nacional",
+      style: "sectionHeader",
+      margin: [0, 10, 0, 4],
+    });
+    content.push(resumenNacionalTable);
+    if (resumenNacionalTotales) {
+      content.push({
+        margin: [0, 6, 0, 10],
+        table: {
+          widths: ["*", 100, 100, 100],
+          body: [
+            ["", "Valor neto", "IVA", "Total bruto"],
+            [
+              { text: "Totales", bold: true },
+              { text: `$ ${Math.round(resumenNacionalTotales.neto || 0).toLocaleString("es-CL")}`, bold: true },
+              { text: `$ ${Math.round(resumenNacionalTotales.iva || 0).toLocaleString("es-CL")}`, bold: true },
+              { text: `$ ${Math.round(resumenNacionalTotales.total || 0).toLocaleString("es-CL")}`, bold: true },
+            ],
+          ],
+        },
+        layout: "lightHorizontalLines",
+      });
+    }
+  }
+
+  content.push({
+    margin: [0, 30, 0, 10],
+    stack: [
+      { text: "Atentamente,", margin: [0, 0, 0, 5] },
+      { text: "Hector Dinamarca", bold: true, fontSize: 11 },
+      { text: "CEO - Kaiser Ingenieria", fontSize: 10 },
+      { text: "Correo: cotizaciones@kaiseringenieria.cl", fontSize: 10 },
+    ],
+  });
+
+  content.push({ text: "Conclusion predeterminada", margin: [0, 20, 0, 10] });
+
   const docDefinition: any = {
     pageMargins: [40, 120, 40, 80],
+    defaultStyle: soloNacional ? { fontSize: 9 } : { fontSize: 10 },
 
     header: {
       margin: [40, 30, 40, 0],
@@ -131,7 +248,7 @@ export const generateCotizacionPDF = async (data: any) => {
             },
             {
               stack: [
-                { text: "Kaiser Ingeniería", bold: true, fontSize: 12 },
+                { text: "Kaiser Ingenieria", bold: true, fontSize: 12 },
                 { text: "www.kaiseringenieria.cl", fontSize: 10 },
               ],
               border: [false, false, false, false],
@@ -144,7 +261,7 @@ export const generateCotizacionPDF = async (data: any) => {
                     body: [
                       [
                         {
-                          text: `N° COTIZACION\n${numeroCotizacion}`,
+                          text: `NRO COTIZACION\n${numeroCotizacion}`,
                           bold: true,
                           alignment: "center",
                           fontSize: 14,
@@ -193,119 +310,13 @@ export const generateCotizacionPDF = async (data: any) => {
       };
     },
 
-    content: [
-      {
-        margin: [0, 0, 0, 15],
-        table: {
-          widths: ["50%", "50%"],
-          body: [
-            [
-              {
-                stack: [
-                  { text: `Nombre Empresa : ${cliente || ""}`, fontSize: 10 },
-                  { text: `RUT : ${rut || ""}`, fontSize: 10 },
-                  { text: `Correo : ${email || ""}`, fontSize: 10 },
-                ],
-              },
-              {
-                stack: [
-                  { text: `Direccion : ${direccion || ""}`, fontSize: 10 },
-                  { text: `Telefono : ${telefono || ""}`, fontSize: 10 },
-                ],
-              },
-            ],
-          ],
-        },
+    content,
+    styles: {
+      sectionHeader: {
+        fontSize: soloNacional ? 11 : 12,
+        bold: true,
       },
-
-      { text: "Introduccion predeterminada", margin: [0, 0, 0, 10] },
-
-      {
-        table: {
-          headerRows: 1,
-          widths: [20, 50, "*", "*", 50, 70, 70],
-          body: [
-            [
-              { text: "#", bold: true },
-              { text: "Codigo", bold: true },
-              { text: "Servicio / Producto", bold: true },
-              { text: "Descripcion", bold: true },
-              { text: "Cantidad", bold: true },
-              { text: "Valor", bold: true },
-              { text: "Total", bold: true },
-            ],
-            ...items,
-          ],
-        },
-        layout: {
-          fillColor: (rowIndex: number) => (rowIndex === 0 ? "#f0f0f0" : null),
-        },
-      },
-
-      {
-        margin: [0, 20, 0, 10],
-        alignment: "right",
-        table: {
-          widths: ["*", 120],
-          body: [
-            ["Moneda :", "Peso Chileno"],
-            ["Neto :", `$ ${subtotalRounded.toLocaleString("es-CL")}`],
-            ["IVA (19%) :", `$ ${ivaRounded.toLocaleString("es-CL")}`],
-            ["Flete :", `$ ${fleteRounded.toLocaleString("es-CL")}`],
-            [
-              { text: "Total :", bold: true },
-              { text: `$ ${totalGeneralRounded.toLocaleString("es-CL")}`, bold: true },
-            ],
-          ],
-        },
-      },
-      resumenNacionalTable
-        ? {
-            text: "Resumen Cliente Nacional",
-            style: "sectionHeader",
-            margin: [0, 10, 0, 4],
-          }
-        : null,
-      resumenNacionalTable,
-      resumenNacionalTable && resumenNacionalTotales
-        ? {
-            margin: [0, 6, 0, 10],
-            table: {
-              widths: ["*", 100, 100, 100],
-              body: [
-                ["", "Valor neto", "IVA", "Total bruto"],
-                [
-                  { text: "Totales", bold: true },
-                  { text: `$ ${Math.round(resumenNacionalTotales.neto || 0).toLocaleString("es-CL")}`, bold: true },
-                  { text: `$ ${Math.round(resumenNacionalTotales.iva || 0).toLocaleString("es-CL")}`, bold: true },
-                  { text: `$ ${Math.round(resumenNacionalTotales.total || 0).toLocaleString("es-CL")}`, bold: true },
-                ],
-              ],
-            },
-            layout: "lightHorizontalLines",
-          }
-        : null,
-      resumenNacionalTable
-        ? {
-            text: "Resumen Cliente Nacional",
-            style: "sectionHeader",
-            margin: [0, 10, 0, 4],
-          }
-        : null,
-      resumenNacionalTable,
-
-      {
-        margin: [0, 30, 0, 10],
-        stack: [
-          { text: "Atentamente,", margin: [0, 0, 0, 5] },
-          { text: "Héctor Dinamarca", bold: true, fontSize: 11 },
-          { text: "CEO - Kaiser Ingeniería", fontSize: 10 },
-          { text: "Correo: cotizaciones@kaiseringenieria.cl", fontSize: 10 },
-        ],
-      },
-
-      { text: "Conclusion predeterminada", margin: [0, 20, 0, 10] },
-    ],
+    },
   };
 
   const pdfMake = await getPdfMake();
