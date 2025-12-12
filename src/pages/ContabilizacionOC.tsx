@@ -99,6 +99,7 @@ const calcularFlujo = (netoCompra: number, netoFlete: number, totalVenta: number
     { mes: 1, concepto: "Compra producto (salida)", monto: -(netoCompra + netoCompra * 0.19) },
     { mes: 2, concepto: "IVA crédito compra (entrada)", monto: netoCompra * 0.19 },
     { mes: 4, concepto: "Pago flete (salida)", monto: -(netoFlete + netoFlete * 0.19) },
+    { mes: 4, concepto: "IVA crédito flete (entrada)", monto: netoFlete * 0.19 },
     { mes: 5, concepto: "Cobro venta (entrada)", monto: totalVenta },
     { mes: 6, concepto: "Pago IVA débito (salida)", monto: -ivaVenta },
   ];
@@ -196,6 +197,38 @@ const TablaFlujo: React.FC<{ flujos: FlujoMensual[]; total: number }> = ({ flujo
   </div>
 );
 
+const ResumenRentabilidad: React.FC<{ cont: number; costeo: number; flujo: number }> = ({ cont, costeo, flujo }) => {
+  const rows = [
+    { label: "RENTABILIDAD CONTABILIDAD", valor: cont },
+    { label: "RENTABILIDAD COSTEO", valor: costeo },
+    { label: "RENTABILIDAD FLUJO", valor: flujo },
+  ];
+
+  const format = (v: number) => fmt(v);
+
+  return (
+    <div className="rounded border p-4 space-y-3 bg-white">
+      <h2 className="text-lg font-semibold">Resumen</h2>
+      <table className="w-full text-sm border-collapse">
+        <thead>
+          <tr className="border-b">
+            <th className="text-left p-2">RESUMEN</th>
+            <th className="text-right p-2">SALDO</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.label} className="border-b last:border-b-0">
+              <td className="p-2 font-semibold">{r.label}</td>
+              <td className={`p-2 text-right ${r.valor < 0 ? "text-red-600" : ""}`}>{format(r.valor)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+};
+
 const ContabilizacionOC: React.FC = () => {
   const [totales, setTotales] = useState({
     netoCompra: 0,
@@ -288,11 +321,18 @@ const ContabilizacionOC: React.FC = () => {
     [totales.netoCompra, totales.netoFlete, totales.totalVenta, totales.ivaVenta]
   );
 
+  const resumenRent = useMemo(() => {
+    const rentCont = (totales.netoCompra + totales.netoFlete) - totales.netoVenta;
+    const rentCosteo = rentCont;
+    const rentFlujo = (totales.netoCompra + totales.netoFlete + totales.ivaVenta) - totales.totalVenta;
+    return { rentCont, rentCosteo, rentFlujo };
+  }, [totales.netoCompra, totales.netoFlete, totales.netoVenta, totales.ivaVenta, totales.totalVenta]);
+
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-bold">Contabilización OC (simulación)</h1>
       <p className="text-sm text-slate-600">
-        Modelo contable basado en datos de ejemplo entregados. IVA = total * 0.19. Saldo = Debe - Haber. Las
+        Modelo contable basado en datos cotizacion aprobada. IVA = total * 0.19. Saldo = Debe - Haber. Las
         diferencias se muestran si no cuadran por redondeos de origen.
       </p>
       {totales.totalVenta === 0 && (
@@ -304,7 +344,15 @@ const ContabilizacionOC: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TablaAsiento asiento={compra} />
         <TablaAsiento asiento={flete} />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TablaAsiento asiento={venta} />
+        <ResumenRentabilidad
+          cont={resumenRent.rentCont}
+          costeo={resumenRent.rentCosteo}
+          flujo={resumenRent.rentFlujo}
+        />
       </div>
 
       <TablaFlujo flujos={flujos} total={total} />

@@ -313,8 +313,20 @@ export default function Cotizaciones() {
                     <TableRow key={item.id}>
                       <TableCell>{item.nombre}</TableCell>
                       <TableCell>{item.cantidad}</TableCell>
-                      <TableCell>{formatPrice(item.precio)}</TableCell>
-                      <TableCell>{formatPrice(item.total)}</TableCell>
+                      {(() => {
+                        const unit = Number.isFinite(item.precio)
+                          ? Number(item.precio)
+                          : Number((item as any).costoCompra || 0);
+                        const total = Number.isFinite(item.total)
+                          ? Number(item.total)
+                          : unit * (Number(item.cantidad) || 0);
+                        return (
+                          <>
+                            <TableCell>{formatPrice(unit)}</TableCell>
+                            <TableCell>{formatPrice(total)}</TableCell>
+                          </>
+                        );
+                      })()}
                     </TableRow>
                   ))}
                 </TableBody>
