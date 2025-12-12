@@ -301,9 +301,7 @@ export default function CrearCotizacion() {
   const fleteInternacionalRows = useMemo(
     () =>
       fleteInternacionalItems.map((item) =>
-        item.descripcion === "Factura Proveedor"
-          ? { ...item, valorEstimado: Math.round(totalNetoBase) }
-          : item
+        item.descripcion === "Factura Proveedor" ? { ...item, valorEstimado: Math.round(totalNetoBase) } : item
       ),
     [fleteInternacionalItems, totalNetoBase]
   );
@@ -321,6 +319,14 @@ export default function CrearCotizacion() {
     fleteInternacionalRows.find((it) => it.descripcion === "Factura Proveedor")?.valorEstimado || 0;
   const fleteFactorCalc = facturaProveedorValor > 0 ? fleteInternacionalTotal / facturaProveedorValor : 0;
 
+  const fleteCostPool = useMemo(
+    () =>
+      fleteInternacionalRows
+        .filter((it) => it.descripcion !== "Factura Proveedor")
+        .reduce((acc, item) => acc + (Number.isFinite(item.valorEstimado) ? Number(item.valorEstimado) : 0), 0),
+    [fleteInternacionalRows]
+  );
+
   const fleteNacionalTotal = useMemo(
     () =>
       fleteNacionalItems.reduce(
@@ -330,20 +336,45 @@ export default function CrearCotizacion() {
     [fleteNacionalItems]
   );
 
+  useEffect(() => {
+    if (tipoFlete !== "internacional" && fleteInternacionalTotal > 0) {
+      setTipoFlete("internacional");
+    }
+  }, [fleteInternacionalTotal, tipoFlete]);
+
+  const calcFleteNacionalItem = (item: Producto) => {
+    const { netoBase, totalPct } = getItemPricing(item);
+    const pct = totalNetoBase > 0 ? (netoBase / totalNetoBase) * 100 : 0;
+    const denom = 1 - totalPct / 100 || 1;
+    const monto = fleteNacionalTotal > 0 ? (fleteNacionalTotal * (pct / 100)) / denom : 0;
+    return { pct, monto };
+  };
+
+  const calcFleteInternacionalItem = (item: Producto) => {
+    const { netoBase, totalPct } = getItemPricing(item);
+    const basePool = Math.max((fleteCostPool || 0), 0);
+    const pct = totalNetoBase > 0 ? (netoBase / totalNetoBase) * 100 : 0;
+    const denom = 1 - totalPct / 100 || 1;
+    const monto = basePool > 0 ? (basePool * (pct / 100)) / denom : 0;
+    return { pct, monto };
+  };
+
   const calcFleteMonto = (item: Producto, baseSubtotal: number) => {
     const { netoVenta, precioVenta, netoBase, totalPct } = getItemPricing(item);
-    const basePool = tipoFlete === "internacional" ? fleteInternacionalTotal - facturaProveedorValor : 0;
-    const defaultPct =
-      tipoFlete === "internacional" && totalNetoBase > 0 ? (netoBase / totalNetoBase) * 100 : 0;
-    const hasCustomFlete = Number.isFinite(item.fleteItem) && Number(item.fleteItem) !== 0;
-    const pct = hasCustomFlete ? Number(item.fleteItem) : defaultPct;
-    const denom = 1 - totalPct / 100;
-    const fleteMontoBase =
-      tipoFlete === "internacional" && basePool > 0 ? (basePool * (pct / 100)) / (denom || 1) : 0;
+    const basePool = tipoFlete === "internacional" ? fleteCostPool : fleteNacionalTotal;
+    const defaultPct = totalNetoBase > 0 ? (netoBase / totalNetoBase) * 100 : 0;
+    const hasCustom =
+      Number.isFinite(item.fleteItem) && item.fleteItem !== undefined && Number(item.fleteItem) !== 0;
+    const pct = hasCustom ? Number(item.fleteItem) : defaultPct;
+    const denom = 1 - totalPct / 100 || 1;
+    const fleteMonto =
+      basePool > 0
+        ? (basePool * (pct / 100)) / denom
+        : netoVenta * (pct / 100);
     return {
       netoItem: netoVenta,
       fletePct: pct,
-      fleteMonto: fleteMontoBase,
+      fleteMonto,
       precioUnit: precioVenta,
     };
   };
@@ -355,6 +386,74 @@ export default function CrearCotizacion() {
   const resumenSubtotal = totalNetoBase;
   const resumenIva = resumenSubtotal * (formData.iva / 100);
   const resumenTotal = resumenSubtotal + resumenIva + fleteTotal;
+
+  const resumenNacionalItems = useMemo(() => {
+    return items.map((item) => {
+      const { netoBase, netoVenta, cantidad } = getItemPricing(item);
+      const { monto: fleteIntlMonto } = calcFleteInternacionalItem(item);
+      const { monto: fleteNacMonto } = calcFleteNacionalItem(item);
+      const netoNacionalBase = netoVenta + fleteIntlMonto + fleteNacMonto;
+      const valorUnitario = cantidad > 0 ? netoNacionalBase / cantidad : 0;
+      const netoNacional = valorUnitario * cantidad;
+      const ivaNacional = netoNacional * (formData.iva / 100);
+      const totalBruto = netoNacional + ivaNacional;
+      return {
+        ...item,
+        proveedorNombre: item.proveedor || "-",
+        dias: item.plazo || 0,
+        valorUnitario,
+        netoNacional,
+        ivaNacional,
+        totalBruto,
+      };
+    });
+  }, [items, subtotal, totalNetoBase, fleteInternacionalTotal, facturaProveedorValor, fleteNacionalTotal, formData.iva]);
+
+  const resumenNacionalTotales = useMemo(() => {
+    return resumenNacionalItems.reduce(
+      (acc, item) => {
+        acc.neto += item.netoNacional || 0;
+        acc.iva += item.ivaNacional || 0;
+        acc.total += item.totalBruto || 0;
+        return acc;
+      },
+      { neto: 0, iva: 0, total: 0 }
+    );
+  }, [resumenNacionalItems]);
+
+  const resumenProductosTotales = useMemo(() => {
+    return items.reduce(
+      (acc, item) => {
+        const { netoBase, ivaBase, totalBase, netoVenta, ivaVenta, brutoVenta, brutoUnit } = getItemPricing(item);
+        const { fleteMonto } = calcFleteMonto(item, subtotal);
+        const totalItem = netoVenta + ivaVenta + fleteMonto;
+        const unitario = item.cantidad ? netoBase / item.cantidad : 0;
+        acc.unitario += unitario || 0;
+        acc.neto += netoBase || 0;
+        acc.iva += ivaBase || 0;
+        acc.totalBase += totalBase || 0;
+        acc.netoRent += netoVenta || 0;
+        acc.ivaRent += ivaVenta || 0;
+        acc.bruto += brutoVenta || 0;
+        acc.brutoUnit += brutoUnit || 0;
+        acc.flete += fleteMonto || 0;
+        acc.totalFinal += totalItem || 0;
+        return acc;
+      },
+      {
+        unitario: 0,
+        neto: 0,
+        iva: 0,
+        totalBase: 0,
+        netoRent: 0,
+        ivaRent: 0,
+        bruto: 0,
+        brutoUnit: 0,
+        flete: 0,
+        totalFinal: 0,
+      }
+    );
+  }, [items, subtotal, totalNetoBase, fleteInternacionalTotal, facturaProveedorValor, fleteNacionalTotal, formData.iva, tipoFlete]);
 
   const guardarProductoNuevo = () => {
     if (!nuevoProducto.nombre) {
@@ -388,15 +487,15 @@ export default function CrearCotizacion() {
 
   const agregarItem = (p: Producto) => {
     setItems((prev) => [
-      ...prev,
-      {
-        ...p,
-        id: `item-${Date.now()}`,
-        margenItem: Number.isFinite(p.margenItem) ? p.margenItem : formData.margen,
-        fleteItem: Number.isFinite(p.fleteItem) ? p.fleteItem : undefined,
-        ctoFinanciero: Number.isFinite(p.ctoFinanciero) ? p.ctoFinanciero : 0,
-      },
-    ]);
+        ...prev,
+        {
+          ...p,
+          id: `item-${Date.now()}`,
+          margenItem: Number.isFinite(p.margenItem) ? p.margenItem : formData.margen,
+          fleteItem: Number.isFinite(p.fleteItem) ? p.fleteItem : undefined,
+          ctoFinanciero: Number.isFinite(p.ctoFinanciero) ? p.ctoFinanciero : 0,
+        },
+      ]);
   };
 
   const actualizarItem = (id: string, data: Partial<Producto>) => {
@@ -501,7 +600,7 @@ export default function CrearCotizacion() {
       incluirFlete: true,
       exchangeRates,
     };
-  }, [selectedClient, numeroCotizacion, formData, items, resumenSubtotal, resumenIva, fleteTotal, resumenTotal, exchangeRates]);
+  }, [selectedClient, numeroCotizacion, formData, items, subtotal, resumenSubtotal, resumenIva, fleteTotal, resumenTotal, exchangeRates]);
 
   const guardarCotizacion = (estado: CotizacionGuardada["estado"], irLista = false) => {
     if (!cotizacionActual) {
@@ -545,6 +644,8 @@ export default function CrearCotizacion() {
       fecha: formData.fechaEmision,
       monedaPdf: formData.monedaPdf,
       exchangeRates,
+      resumenNacional: resumenNacionalItems,
+      resumenNacionalTotales,
     });
     pdf?.download("cotizacion.pdf");
   };
@@ -569,6 +670,8 @@ export default function CrearCotizacion() {
       fecha: formData.fechaEmision,
       monedaPdf: formData.monedaPdf,
       exchangeRates,
+      resumenNacional: resumenNacionalItems,
+      resumenNacionalTotales,
     });
 
       if (!pdf?.getBase64) {
@@ -884,25 +987,29 @@ export default function CrearCotizacion() {
                 </TableHeader>
                 <TableBody>
                   {items.map((item) => {
-                    const {
-                      margenItem,
-                      ctoFinanciero,
-                      netoVenta,
-                      ivaVenta,
-                      brutoVenta,
-                      brutoUnit,
-                      netoBase,
-                      ivaBase,
-                      totalBase,
-                    } = getItemPricing(item);
+                  const {
+                    margenItem,
+                    ctoFinanciero,
+                    netoVenta,
+                    ivaVenta,
+                    brutoVenta,
+                    brutoUnit,
+                    netoBase,
+                    ivaBase,
+                    totalBase,
+                  } = getItemPricing(item);
                     const { fletePct, fleteMonto } = calcFleteMonto(item, subtotal);
                     const displayFletePct = Number.isFinite(fletePct) ? Math.round(fletePct) : 0;
                     const totalItem = netoVenta + ivaVenta + fleteMonto;
                     return (
                       <TableRow key={item.id}>
                         <TableCell className="max-w-[200px] whitespace-normal break-words">
-                          <div className="font-medium break-words">{item.nombre}</div>
-                          <div className="text-xs text-slate-500 break-words">{item.descripcion}</div>
+                          <div className="font-medium truncate max-w-[200px]" title={`${item.nombre || ""}${item.descripcion ? "\n" + item.descripcion : ""}`}>
+                            {item.nombre}
+                          </div>
+                          <div className="text-xs text-slate-500 truncate max-w-[200px]" title={item.descripcion}>
+                            {item.descripcion}
+                          </div>
                         </TableCell>
                         <TableCell className="max-w-[90px]">
                           <Input
@@ -948,7 +1055,7 @@ export default function CrearCotizacion() {
                         </TableCell>
                         <TableCell className="text-right">{formatPrice(fleteMonto)}</TableCell>
                         <TableCell className="text-right font-semibold">{formatPrice(totalItem)}</TableCell>
-                        <TableCell>
+                        <TableCell className="flex gap-1">
                           <Button variant="ghost" size="sm" onClick={() => eliminarItem(item.id)}>
                             <Trash2 className="w-4 h-4" />
                           </Button>
@@ -956,6 +1063,24 @@ export default function CrearCotizacion() {
                       </TableRow>
                     );
                   })}
+                  <TableRow className="font-semibold bg-slate-50">
+                    <TableCell colSpan={2}>Totales</TableCell>
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.unitario)}</TableCell>
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.neto)}</TableCell>
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.iva)}</TableCell>
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.totalBase)}</TableCell>
+                    <TableCell />
+                    <TableCell />
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.netoRent)}</TableCell>
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.ivaRent)}</TableCell>
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.bruto)}</TableCell>
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.brutoUnit)}</TableCell>
+                    <TableCell />
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.flete)}</TableCell>
+                    <TableCell className="text-right">{formatPrice(resumenProductosTotales.totalFinal)}</TableCell>
+                    <TableCell />
+                  </TableRow>
+                 
                 </TableBody>
               </Table>
             </div>
@@ -1022,6 +1147,58 @@ export default function CrearCotizacion() {
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Resumen Cliente Nacional</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Producto</TableHead>
+                <TableHead>Nombre Proveedor</TableHead>
+                <TableHead>N° de Días</TableHead>
+                <TableHead>Cant</TableHead>
+                <TableHead>Moneda</TableHead>
+                <TableHead>Valor unitario</TableHead>
+                <TableHead>Valor neto</TableHead>
+                <TableHead>IVA</TableHead>
+                <TableHead>Total bruto</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {resumenNacionalItems.map((item) => (
+                <TableRow key={`nat-${item.id}`}>
+                  <TableCell className="max-w-[220px] whitespace-normal break-words">
+                    <div className="font-medium truncate max-w-[220px]" title={`${item.nombre || ""}${item.descripcion ? "\n" + item.descripcion : ""}`}>
+                      {item.nombre}
+                    </div>
+                    <div className="text-xs text-slate-500 truncate max-w-[220px]" title={item.descripcion}>
+                      {item.descripcion}
+                    </div>
+                  </TableCell>
+                  <TableCell>{item.proveedorNombre || "-"}</TableCell>
+                  <TableCell className="text-right">{item.dias || 0}</TableCell>
+                  <TableCell className="text-right">{item.cantidad || 0}</TableCell>
+                  <TableCell>{formData.monedaPdf.toUpperCase()}</TableCell>
+                  <TableCell className="text-right">{formatPrice(item.valorUnitario)}</TableCell>
+                  <TableCell className="text-right">{formatPrice(item.netoNacional)}</TableCell>
+                  <TableCell className="text-right">{formatPrice(item.ivaNacional)}</TableCell>
+                  <TableCell className="text-right font-semibold">{formatPrice(item.totalBruto)}</TableCell>
+                </TableRow>
+              ))}
+              <TableRow className="font-semibold bg-slate-50">
+                <TableCell colSpan={6} className="text-right">Totales</TableCell>
+                <TableCell className="text-right">{formatPrice(resumenNacionalTotales.neto)}</TableCell>
+                <TableCell className="text-right">{formatPrice(resumenNacionalTotales.iva)}</TableCell>
+                <TableCell className="text-right">{formatPrice(resumenNacionalTotales.total)}</TableCell>
+              </TableRow>
+              
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
       <Dialog open={isFleteModalOpen} onOpenChange={setIsFleteModalOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -1031,23 +1208,23 @@ export default function CrearCotizacion() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
-            <div className="flex items-center gap-3">
-              <Label className="whitespace-nowrap">Tipo de flete</Label>
-              <Select value={tipoFlete} onValueChange={(v) => setTipoFlete(v as TipoFlete)}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Selecciona" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="nacional">Nacional</SelectItem>
-                  <SelectItem value="internacional">Internacional</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-center">
+              <div className="flex items-center gap-3">
+                <Label className="whitespace-nowrap">Tipo de flete</Label>
+                <Select value={tipoFlete} onValueChange={(v) => setTipoFlete(v as TipoFlete)}>
+                  <SelectTrigger className="w-[180px]">
+                    <SelectValue placeholder="Selecciona" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="nacional">Nacional</SelectItem>
+                    <SelectItem value="internacional">Internacional</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <p className="text-xs text-slate-500">
+                Define si el costo de flete se calcula en mercado nacional o incluye los desgloses internacionales.
+              </p>
             </div>
-            <p className="text-xs text-slate-500">
-              Usa nacional o internacional. En internacional se aplica el reparto automático de flete contra neto.
-            </p>
-          </div>
 
             {tipoFlete === "internacional" ? (
               <>
@@ -1121,9 +1298,6 @@ export default function CrearCotizacion() {
                   <div className="flex items-center gap-2">
                     <span className="text-sm">Factor</span>
                     <Input className="w-24 bg-slate-100" type="number" step="0.01" value={fleteFactorCalc.toFixed(2)} readOnly />
-                  </div>
-                  <div className="text-xs text-slate-500 text-right">
-                    Factor = total flete / factura proveedor. La factura se fija al total neto.
                   </div>
                 </div>
               </>
@@ -1362,23 +1536,23 @@ export default function CrearCotizacion() {
                 </TableBody>
               </Table>
 
-              <div className="flex flex-col items-end space-y-1">
-                <div className="flex justify-between w-64 text-sm">
-                  <span>Neto</span>
-                  <span>{formatPrice(resumenSubtotal)}</span>
-                </div>
-                <div className="flex justify-between w-64 text-sm">
-                  <span>IVA ({formData.iva}%)</span>
-                  <span>{formatPrice(resumenIva)}</span>
-                </div>
-                <div className="flex justify-between w-64 text-sm">
-                  <span>Flete</span>
-                  <span>{formatPrice(fleteTotal)}</span>
-                </div>
-                <div className="flex justify-between w-64 text-base font-semibold">
-                  <span>Total</span>
-                  <span>{formatPrice(resumenTotal)}</span>
-                </div>
+            <div className="flex flex-col items-end space-y-1">
+              <div className="flex justify-between w-64 text-sm">
+                <span>Neto</span>
+                <span>{formatPrice(resumenSubtotal)}</span>
+              </div>
+              <div className="flex justify-between w-64 text-sm">
+                <span>IVA ({formData.iva}%)</span>
+                <span>{formatPrice(resumenIva)}</span>
+              </div>
+              <div className="flex justify-between w-64 text-sm">
+                <span>Flete</span>
+                <span>{formatPrice(fleteTotal)}</span>
+              </div>
+              <div className="flex justify-between w-64 text-base font-semibold">
+                <span>Total</span>
+                <span>{formatPrice(resumenTotal)}</span>
+              </div>
               </div>
 
               <CotizacionActions cotizacion={{
