@@ -345,12 +345,6 @@ export default function CrearCotizacion() {
 
   const fleteTotalPools = Math.max(fleteCostPool || 0, 0) + Math.max(fleteNacionalTotal || 0, 0);
 
-  useEffect(() => {
-    if (tipoFlete !== "internacional" && fleteInternacionalTotal > 0) {
-      setTipoFlete("internacional");
-    }
-  }, [fleteInternacionalTotal, tipoFlete]);
-
   const calcFleteNacionalItem = (item: Producto) => {
     const { netoBase, totalPct } = getItemPricing(item);
     const pct = totalNetoBase > 0 ? (netoBase / totalNetoBase) * 100 : 0;
