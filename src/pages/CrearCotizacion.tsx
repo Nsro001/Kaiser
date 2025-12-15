@@ -234,7 +234,9 @@ export default function CrearCotizacion() {
 
   const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [isProductoModal, setIsProductoModal] = useState(false);
+  const [isEditProductoModal, setIsEditProductoModal] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [productoEnEdicion, setProductoEnEdicion] = useState<Producto | null>(null);
 
   // Cargar datos guardados
   useEffect(() => {
@@ -522,6 +524,20 @@ export default function CrearCotizacion() {
     setItems((prev) => prev.filter((i) => i.id !== id));
   };
 
+  const abrirEdicionProducto = (producto: Producto) => {
+    setProductoEnEdicion({ ...producto });
+    setIsEditProductoModal(true);
+  };
+
+  const guardarEdicionProducto = () => {
+    if (!productoEnEdicion) return;
+    setItems((prev) =>
+      prev.map((it) => (it.id === productoEnEdicion.id ? { ...it, ...productoEnEdicion } : it))
+    );
+    setIsEditProductoModal(false);
+    setProductoEnEdicion(null);
+  };
+
   const actualizarFleteInternacional = (index: number, data: Partial<FleteItem>) => {
     setFleteInternacionalItems((prev) =>
       prev.map((item, idx) => (idx === index ? { ...item, ...data } : item))
@@ -553,6 +569,22 @@ export default function CrearCotizacion() {
         row["valor"] ??
         row["costo"] ??
         0;
+      const plazoExcel = toNumber(
+        row["plazo"] ||
+          row["Plazo"] ||
+          row["Plazo Dias"] ||
+          row["Plazo Días"] ||
+          row["Plazo DÍas"] ||
+          row["plazo_dias"] ||
+          row["Plazo Dヴas"] ||
+          row["N° de Días"] ||
+          row["Nº de Días"] ||
+          row["N° dias"] ||
+          row["Nº dias"] ||
+          row["Dias"] ||
+          row["dias"] ||
+          0
+      );
       return {
         id: `excel-${Date.now()}-${idx}`,
         nombre: row["nombre"] || row["Producto"] || row["descripcion"] || "Producto",
@@ -562,7 +594,22 @@ export default function CrearCotizacion() {
         costoCompra: toNumber(valorOrigen),
         proveedor: row["proveedor"] || row["Proveedor"] || row["Nombre Proveedor"] || "",
         codigo: row["codigo"] || row["Codigo"] || "",
-        plazo: toNumber(row["plazo"] || row["Plazo"] || row["Plazo Días"] || 0),
+        plazo: toNumber(
+          row["plazo"] ||
+          row["Plazo"] ||
+          row["Plazo Dias"] ||
+          row["Plazo Días"] ||
+          row["Plazo DÍas"] ||
+          row["plazo_dias"] ||
+          row["Plazo Dヴas"] ||
+          row["N° de Días"] ||
+          row["Nº de Días"] ||
+          row["N° dias"] ||
+          row["Nº dias"] ||
+          row["Dias"] ||
+          row["dias"] ||
+          0
+        ),
         margenItem: formData.margen,
         fleteItem: undefined,
         ctoFinanciero: toNumber(
@@ -1067,7 +1114,11 @@ export default function CrearCotizacion() {
                     const totalItem = netoVenta + ivaVenta + fleteMonto;
                     return (
                       <TableRow key={item.id}>
-                        <TableCell className="max-w-[200px] whitespace-normal break-words">
+                        <TableCell
+                          className="max-w-[200px] whitespace-normal break-words cursor-pointer"
+                          onClick={() => abrirEdicionProducto(item)}
+                          title="Editar producto"
+                        >
                           <div className="font-medium truncate max-w-[200px]" title={`${item.nombre || ""}${item.descripcion ? "\n" + item.descripcion : ""}`}>
                             {item.nombre}
                           </div>
@@ -1576,6 +1627,108 @@ export default function CrearCotizacion() {
           </div>
           <div className="flex justify-end">
             <Button onClick={guardarProductoNuevo}>Guardar producto</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={isEditProductoModal}
+        onOpenChange={(open) => {
+          setIsEditProductoModal(open);
+          if (!open) setProductoEnEdicion(null);
+        }}
+      >
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Editar producto</DialogTitle>
+            <DialogDescription className="sr-only">
+              Modifica los datos del producto seleccionado.
+            </DialogDescription>
+          </DialogHeader>
+          {productoEnEdicion && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <Input
+                placeholder="Nombre"
+                value={productoEnEdicion.nombre}
+                onChange={(e) => setProductoEnEdicion({ ...productoEnEdicion, nombre: e.target.value })}
+              />
+              <Input
+                placeholder="Codigo"
+                value={productoEnEdicion.codigo || ""}
+                onChange={(e) => setProductoEnEdicion({ ...productoEnEdicion, codigo: e.target.value })}
+              />
+              <Input
+                placeholder="Proveedor"
+                value={productoEnEdicion.proveedor || ""}
+                onChange={(e) => setProductoEnEdicion({ ...productoEnEdicion, proveedor: e.target.value })}
+              />
+              <Input
+                type="number"
+                placeholder="Plazo dias"
+                value={productoEnEdicion.plazo || ""}
+                onChange={(e) => setProductoEnEdicion({ ...productoEnEdicion, plazo: toNumber(e.target.value) })}
+              />
+              <Textarea
+                className="md:col-span-2"
+                placeholder="Descripcion"
+                value={productoEnEdicion.descripcion || ""}
+                onChange={(e) => setProductoEnEdicion({ ...productoEnEdicion, descripcion: e.target.value })}
+              />
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:col-span-2">
+                <div>
+                  <Label>Costo</Label>
+                  <Input
+                    type="number"
+                    value={productoEnEdicion.costoCompra}
+                    onChange={(e) =>
+                      setProductoEnEdicion({ ...productoEnEdicion, costoCompra: toNumber(e.target.value) })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Cantidad</Label>
+                  <Input
+                    type="number"
+                    value={productoEnEdicion.cantidad}
+                    onChange={(e) =>
+                      setProductoEnEdicion({ ...productoEnEdicion, cantidad: toNumber(e.target.value) })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>% Cto Financiero</Label>
+                  <Input
+                    type="number"
+                    value={productoEnEdicion.ctoFinanciero || 0}
+                    onChange={(e) =>
+                      setProductoEnEdicion({ ...productoEnEdicion, ctoFinanciero: toNumber(e.target.value) })
+                    }
+                  />
+                </div>
+                <div>
+                  <Label>Moneda</Label>
+                  <Select
+                    value={productoEnEdicion.moneda}
+                    onValueChange={(v) => setProductoEnEdicion({ ...productoEnEdicion, moneda: v as Moneda })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="clp">CLP</SelectItem>
+                      <SelectItem value="usd">USD</SelectItem>
+                      <SelectItem value="eur">EUR</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setIsEditProductoModal(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarEdicionProducto} disabled={!productoEnEdicion}>
+              Guardar cambios
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
