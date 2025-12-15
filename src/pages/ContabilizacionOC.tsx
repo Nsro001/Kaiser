@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 
 // Tipos contables
 interface CuentaContable {
@@ -330,11 +331,21 @@ const ContabilizacionOC: React.FC = () => {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Contabilización OC (simulación)</h1>
-      <p className="text-sm text-slate-600">
-        Modelo contable basado en datos cotizacion aprobada. IVA = total * 0.19. Saldo = Debe - Haber. Las
-        diferencias se muestran si no cuadran por redondeos de origen.
-      </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Contabilización OC (simulación)</h1>
+          <p className="text-sm text-slate-600">
+            Modelo contable basado en datos cotizacion aprobada. IVA = total * 0.19. Saldo = Debe - Haber. Las
+            diferencias se muestran si no cuadran por redondeos de origen.
+          </p>
+        </div>
+        <Link
+          to="/"
+          className="text-sm font-medium text-blue-600 hover:text-blue-700 underline"
+        >
+          Volver al dashboard
+        </Link>
+      </div>
       {totales.totalVenta === 0 && (
         <div className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded p-3">
           No hay cotizaciones aprobadas en localStorage (estados aceptada/aprobada). Guarda alguna como aprobada y recarga.

@@ -39,6 +39,7 @@ export const generateCotizacionPDF = async (data: any) => {
   } = data;
 
   const fleteMonto = incluirFlete ? Number(flete) || 0 : 0;
+  const fmtCLP = (v: number) => `$ ${Math.round(v || 0).toLocaleString("es-CL")}`;
 
   // Cargar logos
   const logoHeader = await toBase64("/logo-header.png");
@@ -48,7 +49,9 @@ export const generateCotizacionPDF = async (data: any) => {
   let subtotal = 0;
   const items: any[] = [];
 
-  if (!soloNacional) {
+  const soloResumenNacional = Array.isArray(resumenNacional) && resumenNacional.length > 0;
+
+  if (!soloNacional && !soloResumenNacional) {
     productos.forEach((p: any, index: number) => {
       const costo = Number(p.costoCompra);
       const entradaRate = exchangeRates[p.moneda || "clp"] || 1;
@@ -86,7 +89,7 @@ export const generateCotizacionPDF = async (data: any) => {
           fontSize: 9,
           table: {
             headerRows: 1,
-            widths: [25, "*", "*", 45, 35, 45, 55, 55, 55, 55],
+            widths: [25, 140, "*", 45, 35, 45, 55, 55, 55, 55],
             body: [
               [
                 { text: "#", bold: true },
@@ -101,7 +104,6 @@ export const generateCotizacionPDF = async (data: any) => {
                 { text: "Total bruto", bold: true },
               ],
               ...resumenNacional.map((p: any, idx: number) => {
-                const fmt = (v: number) => `$ ${Math.round(v || 0).toLocaleString("es-CL")}`;
                 return [
                   idx + 1,
                   `${p.nombre || ""}\n${p.descripcion || ""}`,
@@ -109,10 +111,10 @@ export const generateCotizacionPDF = async (data: any) => {
                   p.plazo || 0,
                   p.cantidad || 0,
                   (monedaPdf || "CLP").toUpperCase(),
-                  fmt(p.valorUnitario),
-                  fmt(p.netoNacional),
-                  fmt(p.ivaNacional),
-                  fmt(p.totalBruto),
+                  fmtCLP(p.valorUnitario),
+                  fmtCLP(p.netoNacional),
+                  fmtCLP(p.ivaNacional),
+                  fmtCLP(p.totalBruto),
                 ];
               }),
             ],
@@ -147,13 +149,13 @@ export const generateCotizacionPDF = async (data: any) => {
     },
   });
 
-  if (!soloNacional) {
+  if (!soloNacional && !soloResumenNacional) {
     content.push({ text: "Introduccion predeterminada", margin: [0, 0, 0, 10] });
 
     content.push({
       table: {
         headerRows: 1,
-        widths: [20, 50, "*", "*", 50, 70, 70],
+        widths: [20, 50, 180, "*", 50, 70, 70],
         body: [
           [
             { text: "#", bold: true },
@@ -179,17 +181,69 @@ export const generateCotizacionPDF = async (data: any) => {
         widths: ["*", 120],
         body: [
           ["Moneda :", "Peso Chileno"],
-          ["Neto :", `$ ${subtotalRounded.toLocaleString("es-CL")}`],
-          ["IVA (19%) :", `$ ${ivaRounded.toLocaleString("es-CL")}`],
-          ["Flete :", `$ ${fleteRounded.toLocaleString("es-CL")}`],
+          ["Neto :", fmtCLP(subtotalRounded)],
+          ["IVA (19%) :", fmtCLP(ivaRounded)],
+          ["Flete :", fmtCLP(fleteRounded)],
           [
             { text: "Total :", bold: true },
-            { text: `$ ${totalGeneralRounded.toLocaleString("es-CL")}`, bold: true },
+            { text: fmtCLP(totalGeneralRounded), bold: true },
           ],
         ],
       },
     });
   }
+
+  const resumenValores = (() => {
+    const netoResumen = resumenNacionalTotales
+      ? Math.round(resumenNacionalTotales.neto || 0)
+      : subtotalRounded;
+    const ivaResumen = resumenNacionalTotales
+      ? Math.round(resumenNacionalTotales.iva || 0)
+      : ivaRounded;
+    const fleteResumen = fleteRounded;
+    const totalResumen = netoResumen + ivaResumen + fleteResumen;
+    return { netoResumen, ivaResumen, fleteResumen, totalResumen };
+  })();
+
+  content.push({
+    margin: [0, 15, 0, 10],
+    table: {
+      widths: ["*", 120, "*", 120],
+      body: [
+        [
+          { text: "Resumen", bold: true, alignment: "left", colSpan: 4 },
+          {},
+          {},
+          {},
+        ],
+        ["Valor Neto", fmtCLP(resumenValores.netoResumen), "Valor IVA", fmtCLP(resumenValores.ivaResumen)],
+        ["Flete", fmtCLP(resumenValores.fleteResumen), "Valor C IVA", fmtCLP(resumenValores.totalResumen)],
+      ],
+    },
+    layout: "lightHorizontalLines",
+  });
+
+  // Cuadro adicional con totales básicos (neto + IVA = bruto, sin flete)
+  const brutoSinFlete = resumenValores.netoResumen + resumenValores.ivaResumen;
+  content.push({
+    margin: [0, 5, 0, 15],
+    table: {
+      widths: [120, 120, 120],
+      body: [
+        [
+          { text: "Total Neto", bold: true, alignment: "center" },
+          { text: "Valor IVA", bold: true, alignment: "center" },
+          { text: "Total Bruto", bold: true, alignment: "center" },
+        ],
+        [
+          { text: fmtCLP(resumenValores.netoResumen), alignment: "center" },
+          { text: fmtCLP(resumenValores.ivaResumen), alignment: "center" },
+          { text: fmtCLP(brutoSinFlete), alignment: "center" },
+        ],
+      ],
+    },
+    layout: "lightHorizontalLines",
+  });
 
   if (resumenNacionalTable) {
     content.push({
@@ -232,7 +286,7 @@ export const generateCotizacionPDF = async (data: any) => {
 
   const docDefinition: any = {
     pageMargins: [40, 120, 40, 80],
-    defaultStyle: soloNacional ? { fontSize: 9 } : { fontSize: 10 },
+    defaultStyle: soloNacional || soloResumenNacional ? { fontSize: 9 } : { fontSize: 10 },
 
     header: {
       margin: [40, 30, 40, 0],

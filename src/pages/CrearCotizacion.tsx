@@ -107,7 +107,17 @@ interface CotizacionGuardada {
     neto: number;
     iva: number;
     total: number;
+    valorNetoRent?: number;
+    valorIvaRent?: number;
+    valorBrutoRent?: number;
   };
+  productosAprobados?: Array<{
+    id: string;
+    nombre: string;
+    valorNetoProveedor: number;
+  }>;
+  costoProveedorTotal?: number;
+  fleteInternacionalAplicado?: number;
 }
 
 const defaultFleteInternacionalItems: FleteItem[] = [
@@ -418,9 +428,11 @@ export default function CrearCotizacion() {
         acc.neto += item.netoNacional || 0;
         acc.iva += item.ivaNacional || 0;
         acc.total += item.totalBruto || 0;
+        acc.fleteIntl += item.fleteInternacional || 0;
+        acc.fleteNac += item.fleteNacional || 0;
         return acc;
       },
-      { neto: 0, iva: 0, total: 0 }
+      { neto: 0, iva: 0, total: 0, fleteIntl: 0, fleteNac: 0 }
     );
   }, [resumenNacionalItems]);
   const resumenNacionalTotalGeneral = resumenNacionalTotales.neto + resumenNacionalTotales.iva;
@@ -586,6 +598,21 @@ export default function CrearCotizacion() {
 
   const cotizacionActual: CotizacionGuardada | null = useMemo(() => {
     if (!selectedClient) return null;
+
+    const productosAprobados = items.map((it) => ({
+      id: it.id,
+      nombre: it.nombre,
+      valorNetoProveedor: Number(it.costoCompra || 0) * Number(it.cantidad || 0),
+    }));
+    const costoProveedorTotal = productosAprobados.reduce((s, it) => s + Number(it.valorNetoProveedor || 0), 0);
+    const resumenRent = {
+      valorNetoRent: resumenProductosTotales.netoRent,
+      valorIvaRent: resumenProductosTotales.ivaRent,
+      valorBrutoRent: resumenProductosTotales.bruto,
+    };
+    const fleteInternacionalAplicado = tipoFlete === "internacional" ? fleteTotal : 0;
+    const fleteInternacionalDistribuido = resumenNacionalTotales.fleteIntl || 0;
+
     return {
       id: `cot-${Date.now()}`,
       numero: numeroCotizacion,
@@ -605,9 +632,13 @@ export default function CrearCotizacion() {
       exchangeRates,
       fleteInternacionalItems,
       fleteNacionalItems,
-      resumenNacionalTotales,
+      resumenNacionalTotales: { ...resumenNacionalTotales, ...resumenRent },
+      productosAprobados,
+      costoProveedorTotal,
+      fleteInternacionalAplicado,
+      fleteInternacionalDistribuido,
     };
-  }, [selectedClient, numeroCotizacion, formData, items, subtotal, resumenSubtotal, resumenIva, fleteTotal, resumenTotal, exchangeRates]);
+  }, [selectedClient, numeroCotizacion, formData, items, subtotal, resumenSubtotal, resumenIva, fleteTotal, resumenTotal, exchangeRates, resumenProductosTotales, tipoFlete]);
 
   const guardarCotizacion = (estado: CotizacionGuardada["estado"], irLista = false) => {
     if (!cotizacionActual) {

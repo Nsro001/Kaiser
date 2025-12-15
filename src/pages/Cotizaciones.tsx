@@ -71,6 +71,20 @@ interface Cotizacion {
   margen: number;
   flete: number;
   incluirFlete: boolean;
+  resumenNacionalTotales?: {
+    neto: number;
+    iva: number;
+    total: number;
+    valorNetoRent?: number;
+    valorIvaRent?: number;
+    valorBrutoRent?: number;
+  };
+  productosAprobados?: Array<{
+    id: string;
+    nombre: string;
+    valorNetoProveedor: number;
+  }>;
+  costoProveedorTotal?: number;
 }
 
 export default function Cotizaciones() {
