@@ -331,7 +331,7 @@ export const generateCotizacionPDF = async (data: any) => {
     defaultStyle: soloNacional || soloResumenNacional ? { fontSize: 7 } : { fontSize: 8 },
 
     header: {
-      margin: [40, 30, 40, 0],
+      margin: [20, 30, 40, 0],
       table: {
         widths: [80, "*", 220],
         body: [
